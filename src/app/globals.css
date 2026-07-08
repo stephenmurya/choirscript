@@ -1,26 +1,156 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.large-text {
+  font-size: 1.12rem;
+}
+
+.document-title-input,
+.rehearsal-title {
+  font-size: clamp(1.75rem, 8vw, 2.125rem);
+  line-height: 1.1;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.document-section-title {
+  font-size: 1rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.rehearsal-document,
+.rehearsal-document *,
+.technique-badge {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.line-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.line-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.line-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.line-block {
+  --line-label-col: 2.75rem;
+  --syllable-col-min: 2.75rem;
+}
+
+.rehearsal-line,
+.rehearsal-section,
+.rehearsal-voice-lanes,
+.line-block,
+.line-scroll,
+.line-grid-shell,
+.technique-legend {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+@media print {
+  @page {
+    margin: 0.55in;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .no-print,
+  nav,
+  button,
+  input,
+  textarea,
+  select {
+    display: none !important;
+  }
+
+  .rehearsal-document {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .line-scroll {
+    overflow: visible !important;
+    scrollbar-width: none !important;
+  }
+
+  .line-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .line-grid-shell {
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .line-block {
+    --line-label-col: 2rem;
+    --syllable-col-min: 1.9rem;
+  }
+
+  .rehearsal-document,
+  .rehearsal-document * {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+
+  .rehearsal-document header,
+  .rehearsal-line,
+  .technique-legend {
+    box-shadow: none !important;
+  }
+
+  .rehearsal-line {
+    margin-bottom: 12px !important;
+  }
+
+  .print-black-white,
+  .print-black-white * {
+    background: #ffffff !important;
+    border-color: #000000 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
 }

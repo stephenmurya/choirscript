@@ -1,0 +1,88 @@
+import type { Technique } from "./songTypes";
+
+export const DEFAULT_TECHNIQUES: Technique[] = [
+  {
+    id: "slur",
+    name: "Slur",
+    symbol: "~",
+    colorClass: "border-blue-300 bg-blue-100 text-blue-900",
+    highlightClass: "bg-blue-100 text-blue-950 ring-blue-300",
+    swatchClass: "bg-blue-500",
+    borderClass: "border-blue-400",
+    description: "Smoothly connect the selected syllables or words.",
+  },
+  {
+    id: "staccato",
+    name: "Staccato",
+    symbol: "\u2022",
+    colorClass: "border-yellow-300 bg-yellow-100 text-yellow-950",
+    highlightClass: "bg-yellow-100 text-yellow-950 ring-yellow-300",
+    swatchClass: "bg-yellow-400",
+    borderClass: "border-yellow-400",
+    description: "Sing short and detached.",
+  },
+  {
+    id: "accent",
+    name: "Accent",
+    symbol: ">",
+    colorClass: "border-cyan-300 bg-cyan-100 text-cyan-950",
+    highlightClass: "bg-cyan-100 text-cyan-950 ring-cyan-300",
+    swatchClass: "bg-cyan-500",
+    borderClass: "border-cyan-400",
+    description: "Emphasize the selected syllable or word.",
+  },
+  {
+    id: "breath",
+    name: "Breath",
+    symbol: "\u23f8",
+    colorClass: "border-slate-300 bg-slate-100 text-slate-800",
+    highlightClass: "bg-slate-200 text-slate-950 ring-slate-300",
+    swatchClass: "bg-slate-500",
+    borderClass: "border-slate-400",
+    description: "Breathe here.",
+  },
+  {
+    id: "crescendo",
+    name: "Crescendo",
+    symbol: "<",
+    colorClass: "border-green-300 bg-green-100 text-green-950",
+    highlightClass: "bg-green-100 text-green-950 ring-green-300",
+    swatchClass: "bg-green-500",
+    borderClass: "border-green-400",
+    description: "Gradually get louder.",
+  },
+  {
+    id: "decrescendo",
+    name: "Decrescendo",
+    symbol: ">",
+    colorClass: "border-purple-300 bg-purple-100 text-purple-950",
+    highlightClass: "bg-purple-100 text-purple-950 ring-purple-300",
+    swatchClass: "bg-purple-500",
+    borderClass: "border-purple-400",
+    description: "Gradually get softer.",
+  },
+  {
+    id: "hold",
+    name: "Hold",
+    symbol: "\u2014",
+    colorClass: "border-orange-300 bg-orange-100 text-orange-950",
+    highlightClass: "bg-orange-100 text-orange-950 ring-orange-300",
+    swatchClass: "bg-orange-500",
+    borderClass: "border-orange-400",
+    description: "Sustain this syllable or word.",
+  },
+  {
+    id: "cutoff",
+    name: "Cutoff",
+    symbol: "\u2702",
+    colorClass: "border-red-300 bg-red-100 text-red-950",
+    highlightClass: "bg-red-100 text-red-950 ring-red-300",
+    swatchClass: "bg-red-500",
+    borderClass: "border-red-400",
+    description: "Stop together.",
+  },
+];
+
+export function getTechniqueById(id: string): Technique | undefined {
+  return DEFAULT_TECHNIQUES.find((technique) => technique.id === id);
+}
