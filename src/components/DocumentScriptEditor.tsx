@@ -1,12 +1,36 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { LyricSelection, PartKey, Song } from "@/lib/songTypes";
+import type {
+  LineTiming,
+  LyricSelection,
+  PartKey,
+  Song,
+  SongMode,
+  SongTimingSettings,
+  TimingScope,
+  VocalPart,
+} from "@/lib/songTypes";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { AdvancedTimingLine } from "./AdvancedTimingLine";
 import { LyricLineBlock } from "./LyricLineBlock";
 import { LyricsImporter } from "./LyricsImporter";
+import { ModeToggle } from "./ModeToggle";
 import { RawMarkupPreview } from "./RawMarkupPreview";
 import { SlashCommandLine } from "./SlashCommandLine";
 import { TechniqueContextMenu } from "./TechniqueContextMenu";
+import { TimingScopeSelector } from "./TimingScopeSelector";
+import { TimingSettingsPopover } from "./TimingSettingsPopover";
 
 type MenuPosition = {
   x: number;
@@ -24,6 +48,14 @@ type DocumentScriptEditorProps = {
   onCreateSectionAfter: (sectionId: string | null) => void;
   onAddLine: (sectionId: string, lyricLine: string) => void;
   onGenerateScript: (lyrics: string) => void;
+  onModeChange: (mode: SongMode) => void;
+  timingScope: TimingScope;
+  onTimingScopeChange: (scope: TimingScope) => void;
+  onTimingSettingsChange: (settings: SongTimingSettings) => void;
+  onLineTimingChange: (lineId: string, lineTiming: LineTiming) => void;
+  hasTimingOverride: (part: VocalPart) => boolean;
+  onCreateTimingOverride: (part: VocalPart) => void;
+  onResetTimingOverride: (part: VocalPart) => void;
   onSelectionChange: (selection: NonNullable<LyricSelection>) => void;
   onClearSelection: () => void;
   onApplyTechnique: (techniqueId: string) => void;
@@ -61,6 +93,14 @@ export function DocumentScriptEditor({
   onCreateSectionAfter,
   onAddLine,
   onGenerateScript,
+  onModeChange,
+  timingScope,
+  onTimingScopeChange,
+  onTimingSettingsChange,
+  onLineTimingChange,
+  hasTimingOverride,
+  onCreateTimingOverride,
+  onResetTimingOverride,
   onSelectionChange,
   onClearSelection,
   onApplyTechnique,
@@ -126,8 +166,8 @@ export function DocumentScriptEditor({
   }, [onClearSelection, selection, techniqueMenuPosition]);
 
   return (
-    <section className="mx-auto w-full max-w-[900px] overflow-x-hidden px-2 py-5 sm:px-5 sm:py-10">
-      <div className="w-full rounded-xl bg-slate-50/70 px-3 py-5 shadow-sm ring-1 ring-slate-200/70 sm:rounded-2xl sm:px-8 sm:py-8 lg:px-12">
+    <section className="mx-auto w-full max-w-[1100px] overflow-x-hidden px-3 py-4 sm:px-5 sm:py-6 lg:px-8">
+      <div className="w-full rounded-[2rem] border border-border bg-card/70 px-3 py-5 shadow-2xl shadow-background/20 sm:px-7 sm:py-7 lg:px-10">
         <div className="mb-8 sm:mb-10">
           <input
             aria-label="Song title"
@@ -138,52 +178,66 @@ export function DocumentScriptEditor({
               }
             }}
             onChange={(event) => onMetadataChange({ title: event.target.value })}
-            className="document-title-input w-full min-w-0 bg-transparent text-slate-800 outline-none placeholder:text-slate-400"
+            className="document-title-input w-full min-w-0 bg-transparent text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <div className="mt-2 text-sm text-slate-500">{metadataLine(song)}</div>
+          <div className="mt-2 text-sm text-muted-foreground">{metadataLine(song)}</div>
+          <div className="no-print mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <ModeToggle mode={song.mode} onModeChange={onModeChange} />
+            {song.mode === "advanced" ? (
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                <TimingScopeSelector
+                  scope={timingScope}
+                  hasOverride={hasTimingOverride}
+                  onScopeChange={onTimingScopeChange}
+                  onCreateOverride={onCreateTimingOverride}
+                  onResetOverride={onResetTimingOverride}
+                />
+                <TimingSettingsPopover
+                  settings={song.timingSettings}
+                  onChange={onTimingSettingsChange}
+                />
+              </div>
+            ) : null}
+          </div>
           <details
             open={isImportOpen}
             onToggle={(event) => setIsImportOpen(event.currentTarget.open)}
-            className="no-print mt-5 max-w-full rounded-xl border border-slate-200 bg-white/80 p-3"
+            className="no-print mt-5 max-w-full rounded-2xl border border-border bg-muted/20 p-3"
           >
-            <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+            <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
               Import lyrics or edit metadata
             </summary>
             <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <label className="text-sm font-medium text-slate-600">
+              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 Singer / Artist
-                <input
+                <Input
                   value={song.artist ?? ""}
                   onChange={(event) => onMetadataChange({ artist: event.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                 />
-              </label>
-              <label className="text-sm font-medium text-slate-600">
+              </Label>
+              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 Key
-                <input
+                <Input
                   value={song.key ?? ""}
                   onChange={(event) => onMetadataChange({ key: event.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                 />
-              </label>
-              <label className="text-sm font-medium text-slate-600">
+              </Label>
+              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
                 BPM
-                <input
+                <Input
                   value={song.tempo ?? ""}
                   onChange={(event) => onMetadataChange({ tempo: event.target.value })}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
                 />
-              </label>
+              </Label>
             </div>
-            <label className="mt-4 block text-sm font-medium text-slate-600">
+            <Label className="mt-4 flex flex-col gap-2 text-sm font-medium text-muted-foreground">
               Director notes
-              <textarea
+              <Textarea
                 value={song.notes ?? ""}
                 onChange={(event) => onMetadataChange({ notes: event.target.value })}
                 rows={3}
-                className="mt-1 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
               />
-            </label>
+            </Label>
             <div className="mt-4">
               <LyricsImporter
                 activeSectionName={song.sections[0]?.name ?? "the first section"}
@@ -196,11 +250,30 @@ export function DocumentScriptEditor({
           </details>
         </div>
 
-        <div className="space-y-8">
+        {song.mode === "advanced" ? (
+          <Card className="no-print mb-8 border-border bg-muted/20">
+            <CardHeader>
+              <div>
+                <CardTitle>Advanced timing</CardTitle>
+                <CardDescription>
+                  Add bars, counts, holds, rests, breaks, and optional part overrides.
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Timing edits are active for the selected scope above. Simple mode keeps this data
+                hidden but preserved.
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="flex flex-col gap-8">
           {song.sections.map((section) => (
             <section
               key={section.id}
-              className="min-w-0 border-b border-slate-200 pb-8 last:border-b-0"
+              className="min-w-0 border-b border-border/70 pb-8 last:border-b-0"
             >
               <input
                 ref={(node) => {
@@ -223,26 +296,50 @@ export function DocumentScriptEditor({
                     event.currentTarget.blur();
                   }
                 }}
-                className="document-section-title mb-3 w-full bg-transparent text-slate-800 outline-none placeholder:text-slate-400 focus:text-slate-950"
+                className="document-section-title mb-3 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus:text-foreground"
               />
-              {section.lines.map((line, lineIndex) => (
-                <LyricLineBlock
-                  key={line.id}
-                  sectionId={section.id}
-                  line={line}
-                  lineIndex={lineIndex}
-                  includeBass={includeBass}
-                  selection={selection}
-                  onSelectionChange={(nextSelection, menuPosition) => {
-                    onSelectionChange(nextSelection);
-                    if (menuPosition) {
-                      setTechniqueMenuPosition(menuPosition);
-                    }
-                  }}
-                  onUpdateWordSyllables={onUpdateWordSyllables}
-                  onPartCueChange={onPartCueChange}
-                />
-              ))}
+              {section.lines.map((line, lineIndex) => {
+                if (song.mode === "advanced") {
+                  const lineTiming = song.timingByLine[line.id];
+
+                  return lineTiming ? (
+                    <AdvancedTimingLine
+                      key={line.id}
+                      sectionId={section.id}
+                      line={line}
+                      lineIndex={lineIndex}
+                      lineTiming={lineTiming}
+                      settings={song.timingSettings}
+                      includeBass={includeBass}
+                      timingScope={timingScope}
+                      onLineTimingChange={(nextLineTiming) =>
+                        onLineTimingChange(line.id, nextLineTiming)
+                      }
+                      onPartCueChange={onPartCueChange}
+                    />
+                  ) : null;
+                }
+
+                return (
+                  <LyricLineBlock
+                    key={line.id}
+                    sectionId={section.id}
+                    line={line}
+                    lineIndex={lineIndex}
+                    includeBass={includeBass}
+                    selection={selection}
+                    onSelectionChange={(nextSelection, menuPosition) => {
+                      onSelectionChange(nextSelection);
+                      if (menuPosition) {
+                        setTechniqueMenuPosition(menuPosition);
+                      }
+                    }}
+                    onUpdateWordSyllables={onUpdateWordSyllables}
+                    onPartCueChange={onPartCueChange}
+                  />
+                );
+              })}
+              {song.mode === "advanced" ? <Separator className="my-6" /> : null}
               <div className="ml-0 mt-5 sm:ml-9">
                 <SlashCommandLine
                   onCreateLine={(lyrics) => onAddLine(section.id, lyrics)}
@@ -257,8 +354,8 @@ export function DocumentScriptEditor({
           ) : null}
         </div>
 
-        <details className="no-print mt-10 rounded-xl border border-slate-200 bg-white/70 p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-500">
+        <details className="no-print mt-10 rounded-2xl border border-border bg-muted/20 p-3">
+          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
             Raw markup preview
           </summary>
           <div className="mt-3">

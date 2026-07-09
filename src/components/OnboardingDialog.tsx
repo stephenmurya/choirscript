@@ -1,6 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const ONBOARDING_KEY = "choirscript:onboarding-complete";
 
@@ -54,25 +62,6 @@ export function OnboardingDialog({
     }
   }, [autoShow, onOpenChange]);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        complete();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  });
-
-  if (!open) {
-    return null;
-  }
-
   const step = steps[stepIndex];
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === steps.length - 1;
@@ -84,57 +73,45 @@ export function OnboardingDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-slate-950/30 px-4 py-6"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
           complete();
         }
       }}
     >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="onboarding-title"
-        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl shadow-slate-900/20 sm:p-6"
-      >
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-700">
+      <DialogContent>
+        <DialogHeader>
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-primary">
             Tip {stepIndex + 1} of {steps.length}
           </p>
-          <button
-            type="button"
-            onClick={complete}
-            className="min-h-10 rounded-md px-3 py-2 text-sm font-semibold text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
-          >
-            Skip
-          </button>
+          <DialogTitle className="text-2xl">{step.title}</DialogTitle>
+          <DialogDescription className="text-base leading-7">{step.body}</DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center justify-center gap-1.5" aria-hidden="true">
+          {steps.map((item, index) => (
+            <span
+              key={item.title}
+              className={`h-1.5 w-6 rounded-full ${
+                index === stepIndex ? "bg-primary" : "bg-muted"
+              }`}
+            />
+          ))}
         </div>
-        <h2 id="onboarding-title" className="mt-4 text-2xl font-semibold text-slate-950">
-          {step.title}
-        </h2>
-        <p className="mt-3 text-base leading-7 text-slate-600">{step.body}</p>
-        <div className="mt-6 flex items-center justify-between gap-3">
-          <button
+        <div className="flex items-center justify-between gap-3">
+          <Button
             type="button"
+            variant="outline"
             onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
             disabled={isFirst}
-            className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Back
-          </button>
-          <div className="flex gap-1.5" aria-hidden="true">
-            {steps.map((item, index) => (
-              <span
-                key={item.title}
-                className={`h-1.5 w-6 rounded-full ${
-                  index === stepIndex ? "bg-cyan-700" : "bg-slate-200"
-                }`}
-              />
-            ))}
-          </div>
-          <button
+          </Button>
+          <Button type="button" variant="ghost" onClick={complete}>
+            Skip
+          </Button>
+          <Button
             type="button"
             onClick={() => {
               if (isLast) {
@@ -144,12 +121,11 @@ export function OnboardingDialog({
 
               setStepIndex((current) => current + 1);
             }}
-            className="min-h-11 rounded-md bg-cyan-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800"
           >
             {isLast ? "Finish" : "Next"}
-          </button>
+          </Button>
         </div>
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

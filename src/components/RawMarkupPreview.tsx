@@ -8,16 +8,16 @@ type RawMarkupPreviewProps = {
 
 export function RawMarkupPreview({ sections }: RawMarkupPreviewProps) {
   return (
-    <details className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+    <details className="rounded-2xl border border-border bg-card/70 p-4">
+      <summary className="cursor-pointer text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         Raw Markup Preview
       </summary>
-      <div className="mt-4 space-y-4 font-mono text-xs leading-6 text-slate-700">
+      <div className="mt-4 flex flex-col gap-4 font-mono text-xs leading-6 text-muted-foreground">
         {sections.map((section) => (
           <div key={section.id}>
-            <p className="font-semibold text-slate-950">{section.name}</p>
+            <p className="font-semibold text-foreground">{section.name}</p>
             {section.lines.map((line) => (
-              <div key={line.id} className="mt-2 rounded-md bg-slate-50 p-3">
+              <div key={line.id} className="mt-2 rounded-md bg-muted/40 p-3">
                 {line.annotations.map((annotation) => {
                   const technique = getTechniqueById(annotation.techniqueId);
 
@@ -34,7 +34,7 @@ export function RawMarkupPreview({ sections }: RawMarkupPreviewProps) {
                   );
                 })}
                 {line.annotations.length === 0 ? (
-                  <p className="text-slate-400">No annotations on this line.</p>
+                  <p className="text-muted-foreground">No annotations on this line.</p>
                 ) : null}
               </div>
             ))}

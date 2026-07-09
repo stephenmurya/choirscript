@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { getSongById } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
 import type { Song } from "@/lib/songTypes";
+import { Switch } from "@/components/ui/switch";
+import { AdvancedTimingRehearsalView } from "./AdvancedTimingRehearsalView";
 import {
   ColorfulRehearsalView,
   type RehearsalDisplayToggles,
@@ -58,7 +60,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
 
   if (!loaded) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-50 text-slate-600">
+      <main className="grid min-h-screen place-items-center bg-background text-muted-foreground">
         Loading rehearsal view...
       </main>
     );
@@ -66,15 +68,15 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
 
   if (!song) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-12 text-slate-950">
-        <div className="mx-auto max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+      <main className="min-h-screen bg-background px-4 py-12 text-foreground">
+        <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <h1 className="text-2xl font-semibold">Song not found</h1>
-          <p className="mt-3 text-slate-600">
+          <p className="mt-3 text-muted-foreground">
             This song may have been deleted from localStorage.
           </p>
           <Link
             href="/"
-            className="mt-6 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
+            className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
           >
             Return to Dashboard
           </Link>
@@ -84,7 +86,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-50 text-slate-950">
+    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <PrintToolbar
         songId={song.id}
         blackAndWhite={toggles.blackAndWhite}
@@ -93,39 +95,41 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
         }
       />
       <div className="no-print mx-auto max-w-[900px] px-3 py-4 sm:px-5">
-        <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+        <section className="rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Display and export
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
             {toggleLabels.map((toggle) => (
               <label
                 key={toggle.key}
-                className="flex min-h-11 items-center gap-2 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-medium text-slate-700"
+                className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground"
               >
-                <input
-                  type="checkbox"
+                <Switch
                   checked={toggles[toggle.key]}
-                  onChange={(event) =>
+                  onCheckedChange={(checked) =>
                     setToggles((current) => ({
                       ...current,
-                      [toggle.key]: event.target.checked,
+                      [toggle.key]: checked,
                     }))
                   }
-                  className="h-4 w-4 accent-cyan-700"
                 />
                 {toggle.label}
               </label>
             ))}
           </div>
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="mt-3 text-sm text-muted-foreground">
             Color PDF export uses browser print backgrounds. Enable Background graphics in the
             print dialog if highlights do not appear.
           </p>
         </section>
       </div>
 
-      <ColorfulRehearsalView song={song} toggles={toggles} />
+      {song.mode === "advanced" ? (
+        <AdvancedTimingRehearsalView song={song} toggles={toggles} />
+      ) : (
+        <ColorfulRehearsalView song={song} toggles={toggles} />
+      )}
     </main>
   );
 }

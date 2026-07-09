@@ -1,5 +1,6 @@
 import { DEFAULT_TECHNIQUES } from "./defaultTechniques";
 import { splitWordIntoSyllables } from "./syllableSplitter";
+import { DEFAULT_TIMING_SETTINGS, ensureTimingForSong, migrateSongTiming } from "./timing";
 import type {
   Song,
   SongLine,
@@ -70,7 +71,10 @@ export function createEmptySong(): Song {
     key: "",
     tempo: "",
     notes: "",
+    mode: "simple",
     sections: [createEmptySection()],
+    timingSettings: DEFAULT_TIMING_SETTINGS,
+    timingByLine: {},
     createdAt: now,
     updatedAt: now,
   };
@@ -177,6 +181,7 @@ export function createSampleSong(): Song {
     key: "G",
     tempo: "Slow 72 BPM",
     notes: "Teach the melody by call-and-response, then add harmony cues one line at a time.",
+    mode: "simple",
     sections: [
       {
         id: createId("section"),
@@ -184,6 +189,8 @@ export function createSampleSong(): Song {
         lines: verseLines,
       },
     ],
+    timingSettings: DEFAULT_TIMING_SETTINGS,
+    timingByLine: {},
     createdAt: now,
     updatedAt: now,
   };
@@ -227,7 +234,7 @@ function normalizeCueValue(value?: string) {
 function normalizeSong(song: Song): Song {
   const now = new Date().toISOString();
 
-  return {
+  const normalizedSong = migrateSongTiming({
     ...song,
     id: song.id || createId("song"),
     title: (song.title ?? "").trim() || "Untitled Song",
@@ -270,7 +277,11 @@ function normalizeSong(song: Song): Song {
         };
       }),
     })),
-  };
+  });
+
+  return normalizedSong.mode === "advanced"
+    ? ensureTimingForSong(normalizedSong)
+    : normalizedSong;
 }
 
 export function loadSongs(): Song[] {

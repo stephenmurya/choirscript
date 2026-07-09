@@ -1,9 +1,10 @@
 import { Fragment } from "react";
 import {
+  arrangeTechniqueRangeRows,
   flattenLineSyllables,
   getAnnotationsForSyllable,
   getPrimaryAnnotation,
-  groupTechniqueRanges,
+  groupTechniqueDisplayRanges,
   PART_LABELS,
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
@@ -32,7 +33,7 @@ function VoiceLaneValue({
   const value = syllable[part] ?? "";
 
   return (
-    <span className="inline-flex h-9 w-11 min-w-11 items-center justify-center rounded-md border border-slate-300 bg-slate-50 px-1.5 py-2 text-center text-[0.82rem] font-medium text-slate-800 sm:h-8 sm:w-10 sm:min-w-10 sm:py-1.5 sm:text-[0.78rem]">
+    <span className="inline-flex h-9 w-10 min-w-10 items-center justify-center rounded-md border border-border bg-muted/40 px-1.5 py-2 text-center text-[0.82rem] font-medium text-foreground sm:h-8 sm:w-10 sm:min-w-10 sm:py-1.5 sm:text-[0.78rem]">
       {value.trim() || "\u00a0"}
     </span>
   );
@@ -56,10 +57,10 @@ function ReadOnlyVoiceLanes({
     return toggles[part.key];
   });
   const labelClass: Record<PartKey, string> = {
-    soprano: "border-cyan-300 bg-cyan-50 text-cyan-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    alto: "border-violet-300 bg-violet-50 text-violet-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    tenor: "border-amber-300 bg-amber-50 text-amber-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    bass: "border-slate-300 bg-slate-50 text-slate-700 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
+    soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    alto: "border-violet-400/40 bg-violet-500/10 text-violet-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    tenor: "border-amber-400/40 bg-amber-500/10 text-amber-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    bass: "border-border bg-card text-muted-foreground shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
   };
 
   if (rows.length === 0) {
@@ -116,10 +117,10 @@ function DirectorNotes({ line }: { line: SongLine }) {
   }
 
   return (
-    <div className="mt-4 space-y-1 rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+    <div className="mt-4 flex flex-col gap-1 rounded-md bg-muted/30 p-3 text-sm leading-6 text-muted-foreground">
       {notes.map((item) => (
         <p key={item.id}>
-          <span className="font-semibold text-slate-950">{item.label}:</span> {item.note}
+          <span className="font-semibold text-foreground">{item.label}:</span> {item.note}
         </p>
       ))}
     </div>
@@ -134,8 +135,14 @@ function RehearsalLine({
   toggles: RehearsalDisplayToggles;
 }) {
   const flatSyllables = flattenLineSyllables(line);
-  const techniqueRanges = toggles.techniques ? groupTechniqueRanges(line) : [];
-  const lyricGridRow = techniqueRanges.length + 1;
+  const placedTechniqueRanges = toggles.techniques
+    ? arrangeTechniqueRangeRows(groupTechniqueDisplayRanges(line))
+    : [];
+  const annotationRowCount = placedTechniqueRanges.reduce(
+    (maxRow, range) => Math.max(maxRow, range.row + 1),
+    0,
+  );
+  const lyricGridRow = annotationRowCount + 1;
   const voiceStartRow = lyricGridRow + 1;
   const gridStyle = {
     gridTemplateColumns: `var(--line-label-col, 2.75rem) repeat(${Math.max(
@@ -150,8 +157,8 @@ function RehearsalLine({
         data-line-scroll="true"
         className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
       >
-        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-1 pr-3" style={gridStyle}>
-          {techniqueRanges.map((range, rangeIndex) => {
+        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-0.5 pr-3" style={gridStyle}>
+          {placedTechniqueRanges.map((range) => {
             const technique = getTechniqueById(range.techniqueId);
 
             if (!technique) {
@@ -161,20 +168,24 @@ function RehearsalLine({
             return (
               <span
                 key={range.id}
-                className="mb-0.5 flex w-fit max-w-full"
+                className="-mb-px flex w-fit max-w-full justify-self-start"
                 style={{
                   gridColumn: `${range.startIndex + 2} / span ${
                     range.endIndex - range.startIndex + 1
                   }`,
-                  gridRow: rangeIndex + 1,
+                  gridRow: range.row + 1,
                 }}
               >
-                <TechniqueBadge technique={technique} compact />
+                <TechniqueBadge
+                  technique={technique}
+                  compact
+                  className="technique-range-label rounded-t-[6px] rounded-b-none px-2 py-1 text-[0.72rem] shadow-sm"
+                />
               </span>
             );
           })}
           <div
-            className="sticky left-0 z-20 bg-slate-50"
+            className="sticky left-0 z-20 bg-card"
             style={{ gridColumn: 1, gridRow: lyricGridRow }}
           />
           {flatSyllables.map((flat) => {
@@ -191,12 +202,14 @@ function RehearsalLine({
               <span
                 key={flat.id}
                 style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
-                className={`w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded px-1 text-center text-[0.96rem] font-medium leading-8 text-slate-700 sm:leading-7 ${
-                  technique ? technique.highlightClass : ""
-                } ${annotations.length > 1 ? "border-b-2 border-current" : ""}`}
+                className={`min-h-8 w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-2 text-center text-[0.96rem] font-medium leading-none text-foreground ${
+                  technique
+                    ? `${technique.highlightClass} ${technique.borderClass} shadow-sm`
+                    : "border-transparent"
+                } ${annotations.length > 1 ? "ring-1 ring-current/30" : ""}`}
               >
                 {flat.text}
-                {!isWordEnd ? <span className="pl-0.5 text-slate-400">-</span> : null}
+                {!isWordEnd ? <span className="pl-0.5 text-muted-foreground">-</span> : null}
               </span>
             );
           })}
@@ -222,16 +235,16 @@ export function ColorfulRehearsalView({
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >
       <header className="pb-8">
-        <h1 className="rehearsal-title text-slate-800">
+        <h1 className="rehearsal-title text-foreground">
           {song.title || "Untitled Song"}
         </h1>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-muted-foreground">
           {[song.artist ? `Singer: ${song.artist}` : null, song.key ? `Key: ${song.key}` : null, song.tempo ? `BPM: ${song.tempo}` : null]
             .filter(Boolean)
             .join(", ")}
         </p>
         {toggles.directorNotes && song.notes ? (
-          <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-600">
+          <p className="mt-4 max-w-3xl text-sm leading-6 text-muted-foreground">
             {song.notes}
           </p>
         ) : null}
@@ -245,12 +258,12 @@ export function ColorfulRehearsalView({
 
       <div className="space-y-8">
         {song.sections.map((section) => (
-          <section key={section.id} className="rehearsal-section border-b border-slate-200 pb-8 last:border-b-0">
-            <h2 className="mb-3 text-xl font-semibold text-slate-800">
+          <section key={section.id} className="rehearsal-section border-b border-border pb-8 last:border-b-0">
+            <h2 className="mb-3 text-xl font-semibold text-foreground">
               {section.name}
             </h2>
             {section.lines.length === 0 ? (
-              <p className="text-slate-500">
+              <p className="text-muted-foreground">
                 No lyric lines in this section.
               </p>
             ) : null}

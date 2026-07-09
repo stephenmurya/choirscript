@@ -7,8 +7,8 @@ type TechniqueLegendProps = {
 
 export function TechniqueLegend({ compact = false }: TechniqueLegendProps) {
   return (
-    <section className="technique-legend rounded-lg border border-slate-200 bg-white p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500">
+    <section className="technique-legend rounded-2xl border border-border bg-card p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         Technique Legend
       </h2>
       <div
@@ -24,7 +24,11 @@ export function TechniqueLegend({ compact = false }: TechniqueLegendProps) {
             className={`rounded-md border px-3 py-2 text-sm ${technique.colorClass}`}
             title={`${technique.name}: ${technique.description}`}
           >
-            <TechniqueBadge technique={technique} compact={compact} className="border-0 bg-transparent p-0" />
+            <TechniqueBadge
+              technique={technique}
+              compact={compact}
+              className="border-0 bg-transparent p-0"
+            />
             {!compact ? (
               <p className="mt-1 text-xs opacity-85">{technique.description}</p>
             ) : null}

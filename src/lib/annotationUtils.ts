@@ -28,6 +28,10 @@ export type TechniqueRange = {
   endIndex: number;
 };
 
+export type TechniqueRangePlacement = TechniqueRange & {
+  row: number;
+};
+
 export const VOICE_LABELS: Record<VoicePart, string> = {
   all: "All",
   soprano: "Soprano",
@@ -159,6 +163,110 @@ export function groupTechniqueRanges(line: SongLine): TechniqueRange[] {
   });
 
   return ranges.toSorted((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
+}
+
+export function groupTechniqueDisplayRanges(line: SongLine): TechniqueRange[] {
+  const flatSyllables = flattenLineSyllables(line);
+  const syllableIndexMap = new Map(flatSyllables.map((syllable) => [syllable.id, syllable.absoluteIndex]));
+  const syllableIdByIndex = new Map(flatSyllables.map((syllable) => [syllable.absoluteIndex, syllable.id]));
+  const annotationByTechnique = new Map<string, TechniqueAnnotation>();
+  const indexesByTechnique = new Map<string, Set<number>>();
+  const ranges: TechniqueRange[] = [];
+
+  line.annotations.forEach((annotation) => {
+    if (!annotationByTechnique.has(annotation.techniqueId)) {
+      annotationByTechnique.set(annotation.techniqueId, annotation);
+    }
+
+    const indexes = indexesByTechnique.get(annotation.techniqueId) ?? new Set<number>();
+
+    annotation.syllableIds.forEach((syllableId) => {
+      const index = syllableIndexMap.get(syllableId);
+
+      if (index !== undefined) {
+        indexes.add(index);
+      }
+    });
+
+    indexesByTechnique.set(annotation.techniqueId, indexes);
+  });
+
+  indexesByTechnique.forEach((indexes, techniqueId) => {
+    const annotation = annotationByTechnique.get(techniqueId);
+
+    if (!annotation) {
+      return;
+    }
+
+    const rangeAnnotation = annotation;
+    const orderedIndexes = [...indexes].toSorted((a, b) => a - b);
+    let startIndex: number | null = null;
+    let previousIndex: number | null = null;
+
+    function flushRange() {
+      if (startIndex === null || previousIndex === null) {
+        return;
+      }
+
+      const start = startIndex;
+      const end = previousIndex;
+      const syllableIds = Array.from(
+        { length: end - start + 1 },
+        (_, offset) => syllableIdByIndex.get(start + offset),
+      ).filter((id): id is string => Boolean(id));
+
+      if (syllableIds.length === 0) {
+        return;
+      }
+
+      ranges.push({
+        id: `${techniqueId}-${start}-${end}`,
+        annotation: rangeAnnotation,
+        techniqueId,
+        syllableIds,
+        startIndex: start,
+        endIndex: end,
+      });
+    }
+
+    orderedIndexes.forEach((index) => {
+      if (previousIndex !== null && index !== previousIndex + 1) {
+        flushRange();
+        startIndex = index;
+      }
+
+      if (startIndex === null) {
+        startIndex = index;
+      }
+
+      previousIndex = index;
+    });
+
+    flushRange();
+  });
+
+  return ranges.toSorted((a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex);
+}
+
+export function arrangeTechniqueRangeRows(ranges: TechniqueRange[]): TechniqueRangePlacement[] {
+  const rows: TechniqueRange[][] = [];
+
+  return ranges.map((range) => {
+    const row = rows.findIndex((rowRanges) =>
+      rowRanges.every(
+        (placedRange) =>
+          range.endIndex < placedRange.startIndex || range.startIndex > placedRange.endIndex,
+      ),
+    );
+    const nextRow = row === -1 ? rows.length : row;
+
+    rows[nextRow] = [...(rows[nextRow] ?? []), range];
+
+    return {
+      ...range,
+      row: nextRow,
+    };
+  });
 }
 
 export function formatVoices(voices: VoicePart[]) {

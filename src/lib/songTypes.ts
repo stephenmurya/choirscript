@@ -17,6 +17,59 @@ export type Technique = {
 
 export type VoicePart = "all" | "soprano" | "alto" | "tenor" | "bass";
 
+export type SongMode = "simple" | "advanced";
+
+export type MeterPreset = "4/4" | "3/4" | "6/8" | "custom";
+
+export type TimingSubdivision = "beat" | "half-beat";
+
+export type VocalPart = "soprano" | "alto" | "tenor" | "bass";
+
+export type TimingScope = "shared" | VocalPart;
+
+export type SongTimingSettings = {
+  meterPreset: MeterPreset;
+  beatsPerBar: number;
+  beatUnit: number;
+  subdivision: TimingSubdivision;
+  hasPickupBar: boolean;
+  pickupBeats?: number;
+};
+
+export type TimingEventType = "syllable" | "hold" | "rest" | "break";
+
+export type TimingEvent = {
+  id: string;
+  type: TimingEventType;
+  syllableId?: string;
+  sectionId: string;
+  lineId: string;
+  barId: string;
+  scope: TimingScope;
+  startUnit: number;
+  durationUnits: number;
+  label?: string;
+  note?: string;
+};
+
+export type Bar = {
+  id: string;
+  sectionId: string;
+  lineId: string;
+  index: number;
+  isPickup?: boolean;
+  beats: number;
+  beatUnit: number;
+  subdivision: TimingSubdivision;
+};
+
+export type LineTiming = {
+  lineId: string;
+  bars: Bar[];
+  sharedEvents: TimingEvent[];
+  partOverrides: Partial<Record<VocalPart, TimingEvent[]>>;
+};
+
 export type TechniqueAnnotation = {
   id: string;
   techniqueId: string;
@@ -63,7 +116,10 @@ export type Song = {
   key?: string;
   tempo?: string;
   notes?: string;
+  mode: SongMode;
   sections: SongSection[];
+  timingSettings: SongTimingSettings;
+  timingByLine: Record<string, LineTiming>;
   createdAt: string;
   updatedAt: string;
 };

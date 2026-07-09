@@ -11,9 +11,32 @@ import {
   saveSong,
 } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
-import type { LyricSelection, PartKey, Song } from "@/lib/songTypes";
+import {
+  applyTimingSettingsToSong,
+  createPartOverrideFromShared,
+  ensureTimingForSong,
+  resetPartOverride,
+} from "@/lib/timing";
+import type {
+  LineTiming,
+  LyricSelection,
+  PartKey,
+  Song,
+  SongMode,
+  SongTimingSettings,
+  TimingScope,
+  VocalPart,
+} from "@/lib/songTypes";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { AppShell } from "./AppShell";
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
-import { OnboardingDialog } from "./OnboardingDialog";
 
 type SongEditorProps = {
   songId: string;
@@ -27,7 +50,7 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [lyricSelection, setLyricSelection] = useState<LyricSelection>(null);
   const [includeBass, setIncludeBass] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Loading");
-  const [isTipsOpen, setIsTipsOpen] = useState(false);
+  const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
 
   useEffect(() => {
@@ -81,6 +104,55 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => ({ ...current, ...patch }));
   }
 
+  function handleModeChange(mode: SongMode) {
+    updateSong((current) => {
+      const nextSong = { ...current, mode };
+      return mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
+    });
+  }
+
+  function handleTimingSettingsChange(settings: SongTimingSettings) {
+    updateSong((current) => applyTimingSettingsToSong(ensureTimingForSong(current), settings));
+  }
+
+  function handleLineTimingChange(lineId: string, lineTiming: LineTiming) {
+    updateSong((current) => ({
+      ...current,
+      timingByLine: {
+        ...current.timingByLine,
+        [lineId]: lineTiming,
+      },
+    }));
+  }
+
+  function handleCreateTimingOverride(part: VocalPart) {
+    updateSong((current) => {
+      const songWithTiming = ensureTimingForSong(current);
+
+      return {
+        ...songWithTiming,
+        timingByLine: Object.fromEntries(
+          Object.entries(songWithTiming.timingByLine).map(([lineId, lineTiming]) => [
+            lineId,
+            createPartOverrideFromShared(lineTiming, part),
+          ]),
+        ),
+      };
+    });
+  }
+
+  function handleResetTimingOverride(part: VocalPart) {
+    updateSong((current) => ({
+      ...current,
+      timingByLine: Object.fromEntries(
+        Object.entries(current.timingByLine).map(([lineId, lineTiming]) => [
+          lineId,
+          resetPartOverride(lineTiming, part),
+        ]),
+      ),
+    }));
+  }
+
   function handleRenameSection(sectionId: string, name: string) {
     updateSong((current) => ({
       ...current,
@@ -120,14 +192,18 @@ export function SongEditor({ songId }: SongEditorProps) {
   function handleAddLine(sectionId: string, lyricLine: string) {
     const line = createLineFromText(lyricLine);
 
-    updateSong((current) => ({
-      ...current,
-      sections: current.sections.map((section) =>
-        section.id === sectionId
-          ? { ...section, lines: [...section.lines, line] }
-          : section,
-      ),
-    }));
+    updateSong((current) => {
+      const nextSong = {
+        ...current,
+        sections: current.sections.map((section) =>
+          section.id === sectionId
+            ? { ...section, lines: [...section.lines, line] }
+            : section,
+        ),
+      };
+
+      return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
+    });
     setActiveSectionId(sectionId);
   }
 
@@ -147,12 +223,13 @@ export function SongEditor({ songId }: SongEditorProps) {
         const section = createEmptySection("Verse 1");
         section.lines = lines;
         setActiveSectionId(section.id);
-        return { ...current, sections: [section] };
+        const nextSong = { ...current, sections: [section] };
+        return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
       }
 
       const targetSectionId = activeSectionId ?? current.sections[0].id;
 
-      return {
+      const nextSong = {
         ...current,
         sections: current.sections.map((section) =>
           section.id === targetSectionId
@@ -160,6 +237,8 @@ export function SongEditor({ songId }: SongEditorProps) {
             : section,
         ),
       };
+
+      return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
     });
   }
 
@@ -270,85 +349,48 @@ export function SongEditor({ songId }: SongEditorProps) {
     setSaveStatus("Saved");
   }
 
+  function hasTimingOverride(part: VocalPart) {
+    return Boolean(
+      song &&
+        Object.values(song.timingByLine).some((lineTiming) => lineTiming.partOverrides[part]),
+    );
+  }
+
   if (notFound) {
     return (
-      <main className="min-h-screen bg-slate-100 px-4 py-12 text-slate-950">
-        <div className="mx-auto max-w-xl rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-semibold">Song not found</h1>
-          <p className="mt-3 text-slate-600">
-            This song may have been deleted from localStorage.
-          </p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white"
-          >
-            Return to Dashboard
-          </Link>
+      <AppShell activeSongId={songId} saveStatus={saveStatus}>
+        <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
+          <Card className="w-full max-w-xl text-center">
+            <CardHeader>
+              <CardTitle>Song not found</CardTitle>
+              <CardDescription>This song may have been deleted from localStorage.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button render={<Link href="/" />}>Return to songs</Button>
+            </CardContent>
+          </Card>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   if (!song) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-100 text-slate-600">
-        Loading editor...
-      </main>
+      <AppShell activeSongId={songId} saveStatus={saveStatus}>
+        <main className="grid min-h-[calc(100svh-3.5rem)] place-items-center text-muted-foreground">
+          Loading editor...
+        </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-100 text-slate-950">
-      <header className="no-print sticky top-0 z-30 border-b border-slate-200 bg-slate-100/95 px-3 py-3 backdrop-blur sm:px-4">
-        <div className="mx-auto flex max-w-[900px] flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link
-              href="/"
-              className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Dashboard
-            </Link>
-            <span className="text-sm font-semibold text-slate-500">ChoirScript</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {includeBass ? (
-              <span className="rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600">
-                Bass visible
-              </span>
-            ) : null}
-            <span className="min-h-11 rounded-md bg-white px-3 py-2.5 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-              {saveStatus}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsTipsOpen(true)}
-              className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Show tips
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveNow}
-              className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Save
-            </button>
-            <Link
-              href={`/songs/${song.id}/rehearsal`}
-              className="min-h-11 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              Preview
-            </Link>
-            <Link
-              href={`/songs/${song.id}/rehearsal`}
-              className="min-h-11 rounded-md bg-cyan-700 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800"
-            >
-              Print / Save PDF
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <AppShell
+      activeSongId={song.id}
+      currentSong={song}
+      saveStatus={saveStatus}
+      onSave={handleSaveNow}
+    >
       <DocumentScriptEditor
         song={song}
         includeBass={includeBass}
@@ -360,6 +402,14 @@ export function SongEditor({ songId }: SongEditorProps) {
         onCreateSectionAfter={handleCreateSectionAfter}
         onAddLine={handleAddLine}
         onGenerateScript={handleGenerateScript}
+        onModeChange={handleModeChange}
+        timingScope={timingScope}
+        onTimingScopeChange={setTimingScope}
+        onTimingSettingsChange={handleTimingSettingsChange}
+        onLineTimingChange={handleLineTimingChange}
+        hasTimingOverride={hasTimingOverride}
+        onCreateTimingOverride={handleCreateTimingOverride}
+        onResetTimingOverride={handleResetTimingOverride}
         onSelectionChange={(nextSelection) => {
           setLyricSelection(nextSelection);
           setActiveSectionId(nextSelection.sectionId);
@@ -369,7 +419,6 @@ export function SongEditor({ songId }: SongEditorProps) {
         onUpdateWordSyllables={handleUpdateWordSyllables}
         onPartCueChange={handlePartCueChange}
       />
-      <OnboardingDialog open={isTipsOpen} onOpenChange={setIsTipsOpen} autoShow />
-    </main>
+    </AppShell>
   );
 }

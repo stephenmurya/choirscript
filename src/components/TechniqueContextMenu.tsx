@@ -1,6 +1,14 @@
 "use client";
 
 import { DEFAULT_TECHNIQUES } from "@/lib/defaultTechniques";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { TechniqueBadge } from "./TechniqueBadge";
 
 type TechniqueContextMenuProps = {
@@ -19,31 +27,36 @@ export function TechniqueContextMenu({
   return (
     <div
       data-technique-menu="true"
-      className="fixed z-50 w-[min(18rem,calc(100vw-1rem))] rounded-xl border border-slate-200 bg-white p-2 shadow-xl shadow-slate-200/80"
+      className="fixed z-50 w-[min(20rem,calc(100vw-1rem))] rounded-4xl bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/10"
       style={{ left: position.x, top: position.y }}
       role="menu"
       aria-label="Apply technique"
     >
-      <p className="px-2 pb-2 pt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-        Apply technique
-      </p>
-      <div className="grid gap-1">
-        {DEFAULT_TECHNIQUES.map((technique) => (
-          <button
-            key={technique.id}
-            type="button"
-            role="menuitem"
-            onClick={() => onApplyTechnique(technique.id)}
-            className="flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-800 transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
-          >
-            <span
-              aria-hidden="true"
-              className={`h-2.5 w-2.5 rounded-full ${technique.swatchClass}`}
-            />
-            <TechniqueBadge technique={technique} compact />
-          </button>
-        ))}
-      </div>
+      <Command>
+        <CommandInput placeholder="Search techniques..." />
+        <CommandList>
+          <CommandEmpty>No technique found.</CommandEmpty>
+          <CommandGroup heading="Apply technique">
+            {DEFAULT_TECHNIQUES.map((technique) => (
+              <CommandItem
+                key={technique.id}
+                value={`${technique.name} ${technique.symbol}`}
+                onSelect={() => onApplyTechnique(technique.id)}
+                className="min-h-11"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`size-2.5 rounded-full ${technique.swatchClass}`}
+                />
+                <TechniqueBadge technique={technique} compact />
+                <span className="ml-auto truncate text-xs text-muted-foreground">
+                  {technique.description}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </CommandList>
+      </Command>
     </div>
   );
 }

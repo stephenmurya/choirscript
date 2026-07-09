@@ -94,7 +94,7 @@ export function SlashCommandLine({
             setValue("");
           }
         }}
-        className="h-11 w-full rounded-lg border border-transparent bg-transparent px-1 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-200 focus:bg-white focus:px-3 focus:shadow-sm"
+        className="h-11 w-full rounded-xl border border-transparent bg-transparent px-1 text-sm text-foreground outline-none transition placeholder:text-muted-foreground focus:border-border focus:bg-muted/30 focus:px-3 focus:shadow-sm"
       />
       {isMenuOpen ? <SlashCommandMenu commands={commands} /> : null}
     </div>

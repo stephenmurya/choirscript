@@ -24,10 +24,10 @@ export function VoicePartLanes({
 }: VoicePartLanesProps) {
   const rows = PART_LABELS.filter((part) => includeBass || part.key !== "bass");
   const labelClass: Record<PartKey, string> = {
-    soprano: "border-cyan-300 bg-cyan-50 text-cyan-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    alto: "border-violet-300 bg-violet-50 text-violet-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    tenor: "border-amber-300 bg-amber-50 text-amber-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
-    bass: "border-slate-300 bg-slate-50 text-slate-700 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
+    soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    alto: "border-violet-400/40 bg-violet-500/10 text-violet-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    tenor: "border-amber-400/40 bg-amber-500/10 text-amber-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
+    bass: "border-border bg-card text-muted-foreground shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
   };
 
   return (

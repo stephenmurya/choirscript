@@ -2,11 +2,12 @@
 
 import { useRef, useState } from "react";
 import {
+  arrangeTechniqueRangeRows,
   flattenLineSyllables,
   getAnnotationsForSyllable,
   getPrimaryAnnotation,
   getSyllableRangeInLine,
-  groupTechniqueRanges,
+  groupTechniqueDisplayRanges,
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
 import { splitManualSyllables } from "@/lib/syllableSplitter";
@@ -62,8 +63,12 @@ export function LyricLineBlock({
   const flatSyllables = flattenLineSyllables(line);
   const selectedIds =
     selection?.lineId === line.id ? new Set(selection.selectedSyllableIds) : new Set<string>();
-  const techniqueRanges = groupTechniqueRanges(line);
-  const lyricGridRow = techniqueRanges.length + 1;
+  const placedTechniqueRanges = arrangeTechniqueRangeRows(groupTechniqueDisplayRanges(line));
+  const annotationRowCount = placedTechniqueRanges.reduce(
+    (maxRow, range) => Math.max(maxRow, range.row + 1),
+    0,
+  );
+  const lyricGridRow = annotationRowCount + 1;
   const voiceStartRow = lyricGridRow + 1;
   const gridStyle = {
     gridTemplateColumns: `var(--line-label-col, 2.75rem) repeat(${Math.max(
@@ -94,8 +99,8 @@ export function LyricLineBlock({
         data-line-scroll="true"
         className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
       >
-        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-1 pr-3" style={gridStyle}>
-          {techniqueRanges.map((range, rangeIndex) => {
+        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-0.5 pr-3" style={gridStyle}>
+          {placedTechniqueRanges.map((range) => {
             const technique = getTechniqueById(range.techniqueId);
 
             if (!technique) {
@@ -106,21 +111,25 @@ export function LyricLineBlock({
               <button
                 key={range.id}
                 type="button"
-                className="mb-0.5 flex w-fit max-w-full"
+                className="-mb-px flex w-fit max-w-full justify-self-start"
                 style={{
                   gridColumn: `${range.startIndex + 2} / span ${
                     range.endIndex - range.startIndex + 1
                   }`,
-                  gridRow: rangeIndex + 1,
+                  gridRow: range.row + 1,
                 }}
               >
-                <TechniqueBadge technique={technique} compact />
+                <TechniqueBadge
+                  technique={technique}
+                  compact
+                  className="technique-range-label rounded-t-[6px] rounded-b-none px-2 py-1 text-[0.72rem] shadow-sm"
+                />
               </button>
             );
           })}
 
           <div
-            className="sticky left-0 z-20 bg-slate-50"
+            className="sticky left-0 z-20 bg-card"
             style={{ gridColumn: 1, gridRow: lyricGridRow }}
           />
           {flatSyllables.map((flat) => {
@@ -172,10 +181,12 @@ export function LyricLineBlock({
                     value: flat.word.syllables.map((syllable) => syllable.text).join("-"),
                   });
                 }}
-                className={`w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded px-1 text-center text-[0.96rem] font-medium leading-8 text-slate-700 transition focus:outline-none focus:ring-2 focus:ring-cyan-300 sm:leading-7 ${
-                  technique ? technique.highlightClass : ""
-                } ${annotations.length > 1 ? "border-b-2 border-current" : ""} ${
-                  isSelected ? "bg-sky-100 text-sky-950 ring-1 ring-sky-300" : ""
+                className={`min-h-8 w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-2 text-center text-[0.96rem] font-medium leading-none text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring ${
+                  technique
+                    ? `${technique.highlightClass} ${technique.borderClass} shadow-sm`
+                    : "border-transparent"
+                } ${annotations.length > 1 ? "ring-1 ring-current/30" : ""} ${
+                  isSelected ? "border-primary bg-primary/10 text-primary ring-2 ring-ring" : ""
                 }`}
                 title={
                   annotations.length
@@ -189,7 +200,7 @@ export function LyricLineBlock({
                 }
               >
                 {flat.text}
-                {!isWordEnd ? <span className="pl-0.5 text-slate-400">-</span> : null}
+                {!isWordEnd ? <span className="pl-0.5 text-muted-foreground">-</span> : null}
               </button>
             );
           })}
@@ -209,7 +220,7 @@ export function LyricLineBlock({
 
       {editingWord ? (
         <form
-          className="ml-9 mt-3 max-w-md rounded-lg border border-cyan-200 bg-cyan-50 p-3"
+          className="ml-9 mt-3 max-w-md rounded-2xl border border-border bg-popover p-3"
           onSubmit={(event) => {
             event.preventDefault();
             const nextSyllables = splitManualSyllables(editingWord.value);
@@ -220,7 +231,7 @@ export function LyricLineBlock({
             }
           }}
         >
-          <label className="block text-sm font-medium text-slate-700">
+          <label className="block text-sm font-medium text-popover-foreground">
             Edit syllables for {editingWord.word.originalWord}
             <input
               value={editingWord.value}
@@ -230,20 +241,20 @@ export function LyricLineBlock({
                 )
               }
               placeholder="faith-ful-ness"
-              className="mt-1 w-full rounded-md border border-cyan-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-ring focus:ring-2 focus:ring-ring"
             />
           </label>
           <div className="mt-3 flex gap-2">
             <button
               type="submit"
-              className="rounded-md bg-cyan-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-800"
+              className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/80"
             >
               Save syllables
             </button>
             <button
               type="button"
               onClick={() => setEditingWord(null)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-md border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground transition hover:bg-muted"
             >
               Cancel
             </button>
