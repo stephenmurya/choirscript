@@ -142,7 +142,7 @@ export function NotationInput({
           moveVertical(input, -1);
         }
       }}
-      className="h-9 min-w-11 rounded-md border border-slate-300 bg-slate-50 px-1.5 text-center text-[0.82rem] font-medium text-slate-800 outline-none transition placeholder:text-slate-300 hover:border-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100 sm:h-8 sm:min-w-10 sm:text-[0.78rem]"
+      className="h-9 w-11 min-w-11 justify-self-center rounded-md border border-slate-300 bg-slate-50 px-1.5 text-center text-[0.82rem] font-medium text-slate-800 outline-none transition placeholder:text-slate-300 hover:border-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-2 focus:ring-cyan-100 sm:h-8 sm:w-10 sm:min-w-10 sm:text-[0.78rem]"
     />
   );
 }

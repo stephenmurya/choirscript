@@ -71,7 +71,7 @@ select {
 }
 
 .line-block {
-  --line-label-col: 2.75rem;
+  --line-label-col: 2.5rem;
   --syllable-col-min: 2.75rem;
 }
 
@@ -123,6 +123,7 @@ select {
   .line-grid-shell {
     max-width: 100% !important;
     min-width: 0 !important;
+    width: fit-content !important;
   }
 
   .line-block {

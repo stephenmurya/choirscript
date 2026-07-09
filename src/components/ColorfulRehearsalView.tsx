@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
   flattenLineSyllables,
   getAnnotationsForSyllable,
@@ -31,7 +32,7 @@ function VoiceLaneValue({
   const value = syllable[part] ?? "";
 
   return (
-    <span className="h-9 min-w-11 rounded-md border border-slate-300 bg-slate-50 px-1.5 py-2 text-center text-[0.82rem] font-medium text-slate-800 sm:h-8 sm:min-w-10 sm:py-1.5 sm:text-[0.78rem]">
+    <span className="inline-flex h-9 w-11 min-w-11 items-center justify-center rounded-md border border-slate-300 bg-slate-50 px-1.5 py-2 text-center text-[0.82rem] font-medium text-slate-800 sm:h-8 sm:w-10 sm:min-w-10 sm:py-1.5 sm:text-[0.78rem]">
       {value.trim() || "\u00a0"}
     </span>
   );
@@ -40,9 +41,11 @@ function VoiceLaneValue({
 function ReadOnlyVoiceLanes({
   line,
   toggles,
+  gridStartRow,
 }: {
   line: SongLine;
   toggles: RehearsalDisplayToggles;
+  gridStartRow: number;
 }) {
   const syllables = flattenLineSyllables(line);
   const rows = PART_LABELS.filter((part) => {
@@ -52,12 +55,6 @@ function ReadOnlyVoiceLanes({
 
     return toggles[part.key];
   });
-  const gridStyle = {
-    gridTemplateColumns: `var(--line-label-col, 2.75rem) repeat(${Math.max(
-      syllables.length,
-      1,
-    )}, minmax(var(--syllable-col-min, 2.75rem), max-content))`,
-  };
   const labelClass: Record<PartKey, string> = {
     soprano: "border-cyan-300 bg-cyan-50 text-cyan-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
     alto: "border-violet-300 bg-violet-50 text-violet-800 shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]",
@@ -70,27 +67,36 @@ function ReadOnlyVoiceLanes({
   }
 
   return (
-    <div className="rehearsal-voice-lanes mt-2 space-y-1.5">
-      {rows.map((row) => (
-        <div key={row.key} className="grid items-center gap-x-1.5" style={gridStyle}>
+    <>
+      {rows.map((row, rowIndex) => {
+        const gridRow = gridStartRow + rowIndex;
+
+        return (
+        <Fragment key={row.key}>
           <div
             className={`sticky left-0 z-30 grid h-9 w-9 place-items-center rounded-md border text-xs font-semibold sm:h-8 sm:w-8 ${
               labelClass[row.key]
             }`}
-            style={{ gridColumn: 1 }}
+            style={{ gridColumn: 1, gridRow }}
           >
             {row.label[0]}
           </div>
           {syllables.map((flat) => (
-            <VoiceLaneValue
+            <span
               key={`${row.key}-${flat.id}`}
-              syllable={flat.word.syllables[flat.syllableIndex]}
-              part={row.key}
-            />
+              className="grid justify-items-center"
+              style={{ gridColumn: flat.absoluteIndex + 2, gridRow }}
+            >
+              <VoiceLaneValue
+                syllable={flat.word.syllables[flat.syllableIndex]}
+                part={row.key}
+              />
+            </span>
           ))}
-        </div>
-      ))}
-    </div>
+        </Fragment>
+        );
+      })}
+    </>
   );
 }
 
@@ -130,6 +136,7 @@ function RehearsalLine({
   const flatSyllables = flattenLineSyllables(line);
   const techniqueRanges = toggles.techniques ? groupTechniqueRanges(line) : [];
   const lyricGridRow = techniqueRanges.length + 1;
+  const voiceStartRow = lyricGridRow + 1;
   const gridStyle = {
     gridTemplateColumns: `var(--line-label-col, 2.75rem) repeat(${Math.max(
       flatSyllables.length,
@@ -143,59 +150,57 @@ function RehearsalLine({
         data-line-scroll="true"
         className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
       >
-        <div className="line-grid-shell min-w-max pr-3">
-          <div className="grid items-end gap-x-1.5 gap-y-1" style={gridStyle}>
-            {techniqueRanges.map((range, rangeIndex) => {
-              const technique = getTechniqueById(range.techniqueId);
+        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-1 pr-3" style={gridStyle}>
+          {techniqueRanges.map((range, rangeIndex) => {
+            const technique = getTechniqueById(range.techniqueId);
 
-              if (!technique) {
-                return null;
-              }
+            if (!technique) {
+              return null;
+            }
 
-              return (
-                <span
-                  key={range.id}
-                  className="mb-0.5 flex w-fit max-w-full"
-                  style={{
-                    gridColumn: `${range.startIndex + 2} / span ${
-                      range.endIndex - range.startIndex + 1
-                    }`,
-                    gridRow: rangeIndex + 1,
-                  }}
-                >
-                  <TechniqueBadge technique={technique} compact />
-                </span>
-              );
-            })}
-            <div
-              className="sticky left-0 z-20 bg-slate-50"
-              style={{ gridColumn: 1, gridRow: lyricGridRow }}
-            />
-            {flatSyllables.map((flat) => {
-              const annotations = toggles.techniques ? getAnnotationsForSyllable(line, flat.id) : [];
-              const primaryAnnotation = toggles.techniques
-                ? getPrimaryAnnotation(line, flat.id)
-                : undefined;
-              const technique = primaryAnnotation
-                ? getTechniqueById(primaryAnnotation.techniqueId)
-                : undefined;
-              const isWordEnd = flat.syllableIndex === flat.word.syllables.length - 1;
+            return (
+              <span
+                key={range.id}
+                className="mb-0.5 flex w-fit max-w-full"
+                style={{
+                  gridColumn: `${range.startIndex + 2} / span ${
+                    range.endIndex - range.startIndex + 1
+                  }`,
+                  gridRow: rangeIndex + 1,
+                }}
+              >
+                <TechniqueBadge technique={technique} compact />
+              </span>
+            );
+          })}
+          <div
+            className="sticky left-0 z-20 bg-slate-50"
+            style={{ gridColumn: 1, gridRow: lyricGridRow }}
+          />
+          {flatSyllables.map((flat) => {
+            const annotations = toggles.techniques ? getAnnotationsForSyllable(line, flat.id) : [];
+            const primaryAnnotation = toggles.techniques
+              ? getPrimaryAnnotation(line, flat.id)
+              : undefined;
+            const technique = primaryAnnotation
+              ? getTechniqueById(primaryAnnotation.techniqueId)
+              : undefined;
+            const isWordEnd = flat.syllableIndex === flat.word.syllables.length - 1;
 
-              return (
-                <span
-                  key={flat.id}
-                  style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
-                  className={`min-h-8 rounded px-1 text-[0.96rem] font-medium leading-8 text-slate-700 sm:min-h-7 sm:leading-7 ${
-                    technique ? technique.highlightClass : ""
-                  } ${annotations.length > 1 ? "border-b-2 border-current" : ""}`}
-                >
-                  {flat.text}
-                  {!isWordEnd ? <span className="pl-0.5 text-slate-400">-</span> : null}
-                </span>
-              );
-            })}
-          </div>
-          <ReadOnlyVoiceLanes line={line} toggles={toggles} />
+            return (
+              <span
+                key={flat.id}
+                style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
+                className={`w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded px-1 text-center text-[0.96rem] font-medium leading-8 text-slate-700 sm:leading-7 ${
+                  technique ? technique.highlightClass : ""
+                } ${annotations.length > 1 ? "border-b-2 border-current" : ""}`}
+              >
+                {flat.text}
+                {!isWordEnd ? <span className="pl-0.5 text-slate-400">-</span> : null}
+              </span>
+            );
+          })}
+          <ReadOnlyVoiceLanes line={line} toggles={toggles} gridStartRow={voiceStartRow} />
         </div>
       </div>
       {toggles.directorNotes ? <DirectorNotes line={line} /> : null}
