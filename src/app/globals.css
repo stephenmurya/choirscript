@@ -61,6 +61,11 @@ select {
   font: inherit;
 }
 
+::selection {
+  background: color-mix(in oklch, var(--primary) 35%, transparent);
+  color: var(--foreground);
+}
+
 .large-text {
   font-size: 1.12rem;
 }

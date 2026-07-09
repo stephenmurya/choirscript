@@ -59,6 +59,7 @@ type DocumentScriptEditorProps = {
   onSelectionChange: (selection: NonNullable<LyricSelection>) => void;
   onClearSelection: () => void;
   onApplyTechnique: (techniqueId: string) => void;
+  onRemoveTechnique: (lineId: string, syllableIds: string[], techniqueId: string) => void;
   onUpdateWordSyllables: (
     sectionId: string,
     lineId: string,
@@ -104,6 +105,7 @@ export function DocumentScriptEditor({
   onSelectionChange,
   onClearSelection,
   onApplyTechnique,
+  onRemoveTechnique,
   onUpdateWordSyllables,
   onPartCueChange,
 }: DocumentScriptEditorProps) {
@@ -316,6 +318,7 @@ export function DocumentScriptEditor({
                         onLineTimingChange(line.id, nextLineTiming)
                       }
                       onPartCueChange={onPartCueChange}
+                      onRemoveTechnique={onRemoveTechnique}
                     />
                   ) : null;
                 }
@@ -336,6 +339,7 @@ export function DocumentScriptEditor({
                     }}
                     onUpdateWordSyllables={onUpdateWordSyllables}
                     onPartCueChange={onPartCueChange}
+                    onRemoveTechnique={onRemoveTechnique}
                   />
                 );
               })}

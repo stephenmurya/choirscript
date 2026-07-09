@@ -124,6 +124,18 @@ export type Song = {
   updatedAt: string;
 };
 
+export type SharedSongPayload = {
+  schemaVersion: 1;
+  shareId: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  artist?: string;
+  key?: string;
+  bpm?: string;
+  song: Song;
+};
+
 export type PartKey = "soprano" | "alto" | "tenor" | "bass";
 
 export type LyricSelection = {

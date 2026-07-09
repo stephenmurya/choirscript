@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { applyTechniqueToSyllables } from "@/lib/annotationUtils";
+import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
   createEmptySection,
   createLineFromText,
@@ -250,6 +250,12 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => applyTechniqueToSyllables(current, lyricSelection, techniqueId));
   }
 
+  function handleRemoveTechnique(lineId: string, syllableIds: string[], techniqueId: string) {
+    updateSong((current) =>
+      removeTechniqueFromSyllableIds(current, lineId, syllableIds, techniqueId),
+    );
+  }
+
   function handleUpdateWordSyllables(
     sectionId: string,
     lineId: string,
@@ -416,6 +422,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         }}
         onClearSelection={() => setLyricSelection(null)}
         onApplyTechnique={handleApplyTechnique}
+        onRemoveTechnique={handleRemoveTechnique}
         onUpdateWordSyllables={handleUpdateWordSyllables}
         onPartCueChange={handlePartCueChange}
       />

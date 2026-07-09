@@ -356,19 +356,41 @@ export function removeTechniqueFromSyllables(
   selection: NonNullable<LyricSelection>,
   techniqueId: string,
 ): Song {
-  const selectedSet = new Set(selection.selectedSyllableIds);
+  return removeTechniqueFromSyllableIds(song, selection.lineId, selection.selectedSyllableIds, techniqueId);
+}
+
+export function removeTechniqueFromSyllableIds(
+  song: Song,
+  lineId: string,
+  syllableIds: string[],
+  techniqueId: string,
+): Song {
+  const selectedSet = new Set(syllableIds);
 
   return {
     ...song,
     sections: song.sections.map((section) => ({
       ...section,
       lines: section.lines.map((line) => {
-        if (line.id !== selection.lineId) {
+        if (line.id !== lineId) {
           return line;
         }
 
         return {
           ...line,
+          words: line.words.map((word) => ({
+            ...word,
+            syllables: word.syllables.map((syllable) =>
+              selectedSet.has(syllable.id)
+                ? {
+                    ...syllable,
+                    techniques: syllable.techniques.filter(
+                      (technique) => technique.techniqueId !== techniqueId,
+                    ),
+                  }
+                : syllable,
+            ),
+          })),
           annotations: line.annotations
             .map((annotation) =>
               annotation.techniqueId === techniqueId

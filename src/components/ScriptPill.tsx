@@ -23,7 +23,7 @@ const toneClass: Record<ScriptPillTone, string> = {
   rest: "border-muted bg-muted text-muted-foreground",
   break: "border-rose-400/40 bg-rose-500/10 text-rose-100",
   pickup: "border-amber-400/40 bg-amber-500/10 text-amber-100",
-  selected: "border-primary/40 bg-primary/10 text-primary",
+  selected: "border-primary/45 bg-primary/20 text-foreground ring-1 ring-primary/35",
 };
 
 export function ScriptPill({

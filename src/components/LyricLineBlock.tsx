@@ -40,6 +40,7 @@ type LyricLineBlockProps = {
     part: PartKey,
     value: string,
   ) => void;
+  onRemoveTechnique: (lineId: string, syllableIds: string[], techniqueId: string) => void;
 };
 
 type EditingWord = {
@@ -56,6 +57,7 @@ export function LyricLineBlock({
   onSelectionChange,
   onUpdateWordSyllables,
   onPartCueChange,
+  onRemoveTechnique,
 }: LyricLineBlockProps) {
   const [editingWord, setEditingWord] = useState<EditingWord | null>(null);
   const dragStartIdRef = useRef<string | null>(null);
@@ -108,9 +110,8 @@ export function LyricLineBlock({
             }
 
             return (
-              <button
+              <div
                 key={range.id}
-                type="button"
                 className="-mb-px flex w-fit max-w-full justify-self-start"
                 style={{
                   gridColumn: `${range.startIndex + 2} / span ${
@@ -122,9 +123,11 @@ export function LyricLineBlock({
                 <TechniqueBadge
                   technique={technique}
                   compact
+                  removable
+                  onRemove={() => onRemoveTechnique(line.id, range.syllableIds, range.techniqueId)}
                   className="technique-range-label rounded-t-[6px] rounded-b-none px-2 py-1 text-[0.72rem] shadow-sm"
                 />
-              </button>
+              </div>
             );
           })}
 
@@ -186,7 +189,9 @@ export function LyricLineBlock({
                     ? `${technique.highlightClass} ${technique.borderClass} shadow-sm`
                     : "border-transparent"
                 } ${annotations.length > 1 ? "ring-1 ring-current/30" : ""} ${
-                  isSelected ? "border-primary bg-primary/10 text-primary ring-2 ring-ring" : ""
+                  isSelected
+                    ? "border-primary/60 bg-primary/20 text-foreground ring-1 ring-primary/40"
+                    : ""
                 }`}
                 title={
                   annotations.length

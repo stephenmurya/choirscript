@@ -52,6 +52,7 @@ type AdvancedTimingLineProps = {
     part: PartKey,
     value: string,
   ) => void;
+  onRemoveTechnique: (lineId: string, syllableIds: string[], techniqueId: string) => void;
 };
 
 function flattenLineSyllables(line: SongLine) {
@@ -194,6 +195,7 @@ export function AdvancedTimingLine({
   timingScope,
   onLineTimingChange,
   onPartCueChange,
+  onRemoveTechnique,
 }: AdvancedTimingLineProps) {
   const starts = barStarts(lineTiming);
   const totalUnits = getTotalUnits(lineTiming);
@@ -375,7 +377,16 @@ export function AdvancedTimingLine({
                 )}
                 {annotations.slice(0, 1).map((annotation) => {
                   const technique = getTechniqueById(annotation.techniqueId);
-                  return technique ? <TechniqueBadge key={annotation.id} technique={technique} /> : null;
+                  return technique && event.syllableId ? (
+                    <TechniqueBadge
+                      key={annotation.id}
+                      technique={technique}
+                      removable
+                      onRemove={() =>
+                        onRemoveTechnique(line.id, [event.syllableId as string], technique.id)
+                      }
+                    />
+                  ) : null;
                 })}
               </div>
             );

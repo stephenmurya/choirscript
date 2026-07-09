@@ -17,6 +17,7 @@ import {
   Printer,
   Search,
   Settings,
+  Share2,
   Trash,
 } from "lucide-react";
 import {
@@ -57,6 +58,7 @@ import {
 } from "@/components/ui/sheet";
 import { NewSongDialog } from "./NewSongDialog";
 import { OnboardingDialog } from "./OnboardingDialog";
+import { ShareDialog } from "./ShareDialog";
 
 type AppShellProps = {
   activeSongId?: string | null;
@@ -125,6 +127,7 @@ export function AppShell({
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewSongOpen, setIsNewSongOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTipsOpen, setIsTipsOpen] = useState(false);
 
   useEffect(() => {
@@ -201,6 +204,11 @@ export function AppShell({
     if (song.id === activeSongId) {
       router.push("/");
     }
+  }
+
+  function openShareDialog() {
+    onSave?.();
+    setIsShareOpen(true);
   }
 
   function renderSidebarContent() {
@@ -418,6 +426,10 @@ export function AppShell({
                     <Eye data-icon="inline-start" />
                     Preview
                 </Button>
+                <Button type="button" variant="outline" size="sm" className="hidden md:inline-flex" onClick={openShareDialog}>
+                  <Share2 data-icon="inline-start" />
+                  Share
+                </Button>
                 <Button
                   render={<Link href={`/songs/${currentSong.id}/rehearsal`} />}
                   size="sm"
@@ -446,6 +458,10 @@ export function AppShell({
                       <DropdownMenuItem onClick={() => setIsTipsOpen(true)}>
                         <HelpCircle data-icon="inline-start" />
                         Show tips
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="md:hidden" onClick={openShareDialog}>
+                        <Share2 data-icon="inline-start" />
+                        Share
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="sm:hidden"
@@ -492,6 +508,7 @@ export function AppShell({
         onClose={() => setIsNewSongOpen(false)}
         onCreate={handleCreateSong}
       />
+      <ShareDialog song={currentSong} open={isShareOpen} onOpenChange={setIsShareOpen} />
       <OnboardingDialog open={isTipsOpen} onOpenChange={setIsTipsOpen} autoShow />
     </div>
   );
