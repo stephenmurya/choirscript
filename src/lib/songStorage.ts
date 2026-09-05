@@ -231,7 +231,12 @@ function normalizeCueValue(value?: string) {
   return value === "Sol" ? "So" : value ?? "";
 }
 
-function normalizeSong(song: Song): Song {
+/**
+ * Canonical sanitizer/migration boundary for song content. Runs on every
+ * local load, cloud load and save. Kept independent of localStorage so the
+ * cloud repository can reuse it.
+ */
+export function normalizeSong(song: Song): Song {
   const now = new Date().toISOString();
 
   const normalizedSong = migrateSongTiming({

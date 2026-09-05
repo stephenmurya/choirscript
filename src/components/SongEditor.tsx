@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
   createEmptySection,
   createLineFromText,
   createSyllableToken,
-  getSongById,
-  saveSong,
+  normalizeSong,
 } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
+import {
+  getSongWithMeta,
+  saveSong as saveCloudSong,
+  type WorkspaceContext,
+} from "@/lib/firebase/songs";
+import type { SongMeta } from "@/lib/firebase/types";
+import { useAuth } from "@/lib/firebase/AuthContext";
 import {
   applyTimingSettingsToSong,
   createPartOverrideFromShared,
@@ -42,50 +49,118 @@ type SongEditorProps = {
   songId: string;
 };
 
+type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed";
+
+const AUTOSAVE_DEBOUNCE_MS = 700;
+
 export function SongEditor({ songId }: SongEditorProps) {
+  const { user, workspaceId } = useAuth();
   const [song, setSong] = useState<Song | null>(null);
+  const [songMeta, setSongMeta] = useState<SongMeta | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const [focusedSectionId, setFocusedSectionId] = useState<string | null>(null);
   const [lyricSelection, setLyricSelection] = useState<LyricSelection>(null);
   const [includeBass, setIncludeBass] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Loading");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
 
+  const uid = user?.uid ?? null;
+  const activeWorkspaceId = workspaceId;
+
+  const workspaceContext: WorkspaceContext | null =
+    uid && activeWorkspaceId ? { uid, workspaceId: activeWorkspaceId } : null;
+
+  // Load the song (metadata + body) from Firestore once. State resets happen
+  // via the async boundary (microtask) so the effect body never calls
+  // setState synchronously.
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      const loadedSong = getSongById(songId);
-
-      if (!loadedSong) {
-        setNotFound(true);
-        setSaveStatus("Not found");
-        return;
-      }
-
-      setSong(loadedSong);
-      setIncludeBass(songHasBass(loadedSong));
-      setActiveSectionId(loadedSong.sections[0]?.id ?? null);
-      hasLoaded.current = true;
-      setSaveStatus("Saved");
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [songId]);
-
-  useEffect(() => {
-    if (!song || !hasLoaded.current) {
+    if (!uid || !activeWorkspaceId) {
       return;
     }
 
-    setSaveStatus("Saving...");
+    let cancelled = false;
+    hasLoaded.current = false;
+
+    Promise.resolve().then(() => {
+      if (cancelled) {
+        return;
+      }
+      setSong(null);
+      setSongMeta(null);
+      setNotFound(false);
+      setLoadError(null);
+      setSaveState("idle");
+    });
+
+    getSongWithMeta(activeWorkspaceId, songId)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!result) {
+          setNotFound(true);
+          return;
+        }
+
+        // Cloud-loaded songs pass through the canonical sanitizer/migration
+        // boundary before entering editor state.
+        const normalizedSong = normalizeSong(result.song);
+        setSong(normalizedSong);
+        setSongMeta(result.meta);
+        setIncludeBass(songHasBass(normalizedSong));
+        setActiveSectionId(normalizedSong.sections[0]?.id ?? null);
+        hasLoaded.current = true;
+        setSaveState("saved");
+      })
+      .catch((error) => {
+        console.error("Could not load song", error);
+        if (!cancelled) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Could not load the song. Check your connection and try again.",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWorkspaceId, uid, songId]);
+
+  // Debounced autosave (700ms) through the cloud repository. The in-memory
+  // song is never reset on failure — the editor state is preserved and the
+  // user can retry via "Save now".
+  useEffect(() => {
+    if (!song || !uid || !activeWorkspaceId || !hasLoaded.current) {
+      return;
+    }
+
+    if (saveState !== "dirty") {
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
-      saveSong(song);
-      setSaveStatus("Saved");
-    }, 450);
+      setSaveState("saving");
+      saveCloudSong(activeWorkspaceId, song, uid, songMeta)
+        .then((meta) => {
+          setSongMeta(meta);
+          // Only show "Saved" if nothing was edited while saving.
+          setSaveState((current) => (current === "saving" ? "saved" : current));
+        })
+        .catch((error) => {
+          console.error("Cloud save failed", error);
+          // Keep the editor content; surface explicit failure state.
+          setSaveState((current) => (current === "saving" ? "failed" : current));
+        });
+    }, AUTOSAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [song]);
+  }, [song, saveState, activeWorkspaceId, uid, songMeta]);
 
   function updateSong(updater: (current: Song) => Song) {
     setSong((current) => {
@@ -98,6 +173,29 @@ export function SongEditor({ songId }: SongEditorProps) {
         updatedAt: new Date().toISOString(),
       };
     });
+    setSaveState("dirty");
+  }
+
+  function handleSaveNow() {
+    if (!song || !workspaceContext) {
+      return;
+    }
+
+    setSaveState("saving");
+    saveCloudSong(workspaceContext.workspaceId, song, workspaceContext.uid, songMeta)
+      .then((meta) => {
+        setSongMeta(meta);
+        setSaveState("saved");
+      })
+      .catch((error) => {
+        console.error("Cloud save failed", error);
+        setSaveState("failed");
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not save. Your edits are still here — please try again.",
+        );
+      });
   }
 
   function handleMetadataChange(patch: Partial<Song>) {
@@ -346,15 +444,6 @@ export function SongEditor({ songId }: SongEditorProps) {
     }));
   }
 
-  function handleSaveNow() {
-    if (!song) {
-      return;
-    }
-
-    saveSong(song);
-    setSaveStatus("Saved");
-  }
-
   function hasTimingOverride(part: VocalPart) {
     return Boolean(
       song &&
@@ -362,14 +451,27 @@ export function SongEditor({ songId }: SongEditorProps) {
     );
   }
 
+  const saveStatus =
+    saveState === "saving"
+      ? "Saving..."
+      : saveState === "saved"
+        ? "Saved"
+        : saveState === "dirty"
+          ? "Unsaved"
+          : saveState === "failed"
+            ? "Save failed"
+            : "Loading";
+
   if (notFound) {
     return (
-      <AppShell activeSongId={songId} saveStatus={saveStatus}>
+      <AppShell activeSongId={songId} saveStatus="Not found">
         <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
           <Card className="w-full max-w-xl text-center">
             <CardHeader>
               <CardTitle>Song not found</CardTitle>
-              <CardDescription>This song may have been deleted from localStorage.</CardDescription>
+              <CardDescription>
+                This song may have been deleted from your workspace.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button render={<Link href="/" />}>Return to songs</Button>
@@ -380,9 +482,29 @@ export function SongEditor({ songId }: SongEditorProps) {
     );
   }
 
+  if (loadError) {
+    return (
+      <AppShell activeSongId={songId} saveStatus="Load failed">
+        <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
+          <Card className="w-full max-w-xl text-center">
+            <CardHeader>
+              <CardTitle>Couldn&apos;t load this song</CardTitle>
+              <CardDescription>{loadError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button render={<Link href="/" />} variant="outline">
+                Return to songs
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </AppShell>
+    );
+  }
+
   if (!song) {
     return (
-      <AppShell activeSongId={songId} saveStatus={saveStatus}>
+      <AppShell activeSongId={songId} saveStatus="Loading">
         <main className="grid min-h-[calc(100svh-3.5rem)] place-items-center text-muted-foreground">
           Loading editor...
         </main>

@@ -1,0 +1,137 @@
+rules_version = '2';
+
+// ChoirScript Firestore security rules — Phase 1 (auth + cloud persistence).
+//
+// Model:
+//   users/{uid}                                        — profile docs
+//   workspaces/{workspaceId}                           — workspace docs
+//   workspaces/{workspaceId}/members/{uid}             — membership docs (role field)
+//   workspaces/{workspaceId}/songs/{songId}            — song metadata (dashboard listing)
+//   workspaces/{workspaceId}/songs/{songId}/document/{docId} — song body ("current")
+//
+// Phase 1 only ever writes role "owner", but the helper functions below read
+// the stored role so admins/editors/viewers can be introduced later without
+// rewriting this file.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Helper functions ----------
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function membershipDoc(workspaceId, uid) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(uid));
+    }
+
+    // Signed-in user who holds any membership record in the workspace.
+    function isWorkspaceMember(workspaceId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function hasWorkspaceRole(workspaceId, roles) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid))
+        && membershipDoc(workspaceId, request.auth.uid).data.role in roles;
+    }
+
+    function isWorkspaceOwner(workspaceId) {
+      return hasWorkspaceRole(workspaceId, ['owner']);
+    }
+
+    function canWriteWorkspaceData(workspaceId) {
+      // Phase 1: only owners exist, so ownership == write access.
+      // Later phases can widen this to admins/editors.
+      return isWorkspaceOwner(workspaceId);
+    }
+
+    // ---------- users/{uid} ----------
+
+    match /users/{uid} {
+      // Profiles are private: readable and writable only by that user. No
+      // Phase 1 requirement for users to read one another's profiles; member
+      // documents inside a workspace carry the minimal display info needed.
+      allow get, list: if isSelf(uid);
+      allow create: if isSelf(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.defaultWorkspaceId == null;
+      allow update: if isSelf(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+    }
+
+    // ---------- workspaces ----------
+
+    match /workspaces/{workspaceId} {
+      // Workspace docs are readable by members only. Creation is allowed only
+      // for a user's own deterministic default workspace (default-{uid}) so
+      // bootstrap writes pass while arbitrary workspace squatting stays
+      // blocked. Future phases can relax create for explicit "create team
+      // workspace" flows.
+      allow get: if isWorkspaceMember(workspaceId)
+        // First-bootstrap read: the membership doesn't exist pre-batch, but
+        // the deterministic ID proves the caller is reading their own default
+        // workspace.
+        || (isSignedIn() && workspaceId == 'default-' + request.auth.uid);
+      allow list: if false;
+      allow create: if isSignedIn()
+        && workspaceId == 'default-' + request.auth.uid
+        && request.resource.data.createdBy == request.auth.uid;
+      // Phase 1: owner may rename the workspace; destructive delete is
+      // disabled until workspace management exists.
+      allow update: if isWorkspaceOwner(workspaceId);
+      allow delete: if false;
+
+      // ---------- members ----------
+
+      match /members/{memberUid} {
+        // Members can see who else is in the workspace.
+        allow get, list: if isWorkspaceMember(workspaceId);
+        // Bootstrap path: a signed-in user may create their OWN owner
+        // membership in their deterministic default workspace. Rules evaluate
+        // against pre-batch state, so this does not (and cannot) read the
+        // workspace doc created in the same batch — the deterministic ID
+        // binding is what makes the bootstrap write verifiable.
+        allow create: if isSignedIn()
+          && request.resource.data.role == 'owner'
+          && memberUid == request.auth.uid
+          && workspaceId == 'default-' + request.auth.uid;
+        // Members may keep their own member doc's denormalized profile fields
+        // fresh; role changes are owner-only (no-op in Phase 1).
+        allow update: if (isWorkspaceOwner(workspaceId))
+          || (isSelf(memberUid) && request.resource.data.role == resource.data.role);
+        allow delete: if isWorkspaceOwner(workspaceId) && memberUid == request.auth.uid;
+      }
+
+      // ---------- songs ----------
+
+      match /songs/{songId} {
+        allow get, list: if isWorkspaceMember(workspaceId);
+        allow create: if canWriteWorkspaceData(workspaceId)
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if canWriteWorkspaceData(workspaceId);
+        allow delete: if isWorkspaceOwner(workspaceId);
+
+        // ---------- song document body ----------
+
+        match /document/{documentId} {
+          allow get, list: if isWorkspaceMember(workspaceId);
+          allow create, update: if canWriteWorkspaceData(workspaceId);
+          allow delete: if isWorkspaceOwner(workspaceId);
+        }
+      }
+    }
+
+    // Deny everything else explicitly.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

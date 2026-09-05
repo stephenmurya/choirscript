@@ -1,3 +1,4 @@
+import { AuthGate } from "@/components/AuthGate";
 import { SongEditor } from "@/components/SongEditor";
 
 type SongPageProps = {
@@ -7,5 +8,9 @@ type SongPageProps = {
 export default async function SongPage({ params }: SongPageProps) {
   const { id } = await params;
 
-  return <SongEditor songId={id} />;
+  return (
+    <AuthGate>
+      <SongEditor songId={id} />
+    </AuthGate>
+  );
 }

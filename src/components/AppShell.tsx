@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   CheckCircle,
-  Clock,
+  Clock as ClockIcon,
+  CloudOff,
   Copy,
   Eye,
   FileText,
   HelpCircle,
+  Loader2,
   MoreHorizontal,
   PanelLeft,
   Plus,
@@ -22,12 +25,12 @@ import {
 } from "lucide-react";
 import {
   createEmptySong,
-  deleteSong,
-  duplicateSong,
-  loadSongs,
-  saveSong,
 } from "@/lib/songStorage";
 import type { Song } from "@/lib/songTypes";
+import { createSong, deleteSong as deleteCloudSong, duplicateSong as duplicateCloudSong, listSongs } from "@/lib/firebase/songs";
+import type { SongMeta } from "@/lib/firebase/types";
+import { useAuth } from "@/lib/firebase/AuthContext";
+import { signOutUser } from "@/lib/firebase/auth";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,11 +78,11 @@ function formatUpdated(value: string) {
   }).format(new Date(value));
 }
 
-function songMetadata(song: Song) {
+function songMetadata(song: Pick<SongMeta, "artist" | "key" | "tempo">) {
   return [song.artist, song.key, song.tempo].filter(Boolean).join(" / ");
 }
 
-function sortSongs(songs: Song[]) {
+function sortSongMetas(songs: SongMeta[]) {
   return songs.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
@@ -96,8 +99,8 @@ function EmptyWorkspace({
         <CardHeader>
           <CardTitle className="text-2xl">Select a song or create a new one</CardTitle>
           <CardDescription>
-            ChoirScript keeps your rehearsal scripts local for now. Choose a saved song from the
-            sidebar, or start a new document.
+            Your rehearsal scripts are saved to your workspace in the cloud. Choose a song from
+            the sidebar, or start a new document.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row">
@@ -123,35 +126,57 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const router = useRouter();
-  const [songs, setSongs] = useState<Song[]>([]);
+  const { user, workspaceId } = useAuth();
+  const [songs, setSongs] = useState<SongMeta[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
+  const [cloudError, setCloudError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewSongOpen, setIsNewSongOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTipsOpen, setIsTipsOpen] = useState(false);
 
+  // Load song metadata (one-time read) once the workspace is available.
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setSongs(loadSongs());
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
-  useEffect(() => {
-    if (!currentSong) {
+    if (!workspaceId) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setSongs((existingSongs) => {
-        const withoutCurrent = existingSongs.filter((song) => song.id !== currentSong.id);
-        return sortSongs([currentSong, ...withoutCurrent]);
-      });
-    }, 0);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timeoutId);
-  }, [currentSong]);
+    Promise.resolve().then(() => {
+      if (!cancelled) {
+        setIsLoadingSongs(true);
+      }
+    });
+
+    listSongs(workspaceId)
+      .then((metas) => {
+        if (!cancelled) {
+          setSongs(sortSongMetas(metas));
+          setCloudError(null);
+        }
+      })
+      .catch((error) => {
+        console.error("Could not load songs", error);
+        if (!cancelled) {
+          setCloudError(
+            error instanceof Error
+              ? error.message
+              : "Could not load your songs. Check your connection and refresh.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingSongs(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
 
   const visibleSongs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -167,41 +192,78 @@ export function AppShell({
     );
   }, [searchQuery, songs]);
 
-  function refreshSongs() {
-    setSongs(loadSongs());
-  }
-
   function handleCreateSong(
     metadata: Pick<Song, "title"> & Partial<Pick<Song, "artist" | "key" | "tempo">>,
   ) {
-    const song = {
-      ...createEmptySong(),
-      ...metadata,
-    };
-
-    saveSong(song);
-    refreshSongs();
-    setIsNewSongOpen(false);
-    setIsSidebarOpen(false);
-    router.push(`/songs/${song.id}`);
-  }
-
-  function handleDuplicate(song: Song) {
-    const copy = duplicateSong(song);
-    saveSong(copy);
-    refreshSongs();
-    router.push(`/songs/${copy.id}`);
-  }
-
-  function handleDelete(song: Song) {
-    if (!window.confirm(`Delete "${song.title || "Untitled Song"}"?`)) {
+    if (!workspaceId || !user) {
+      toast.error("Still loading your workspace. Please try again in a moment.");
       return;
     }
 
-    deleteSong(song.id);
-    refreshSongs();
+    const song: Song = {
+      ...createEmptySong(),
+      ...metadata,
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (song.id === activeSongId) {
+    // Optimistic insert; reconcile with the server-generated metadata.
+    createSong(workspaceId, song, user.uid)
+      .then((meta) => {
+        setSongs((current) => sortSongMetas([meta, ...current.filter((item) => item.id !== meta.id)]));
+        setIsNewSongOpen(false);
+        setIsSidebarOpen(false);
+        router.push(`/songs/${meta.id}`);
+      })
+      .catch((error) => {
+        console.error("Could not create song", error);
+        toast.error(
+          error instanceof Error ? error.message : "Could not create the song. Please try again.",
+        );
+      });
+  }
+
+  function handleDuplicate(songMeta: SongMeta) {
+    if (!workspaceId || !user) {
+      return;
+    }
+
+    duplicateCloudSong(workspaceId, songMeta.id, user.uid)
+      .then((copyMeta) => {
+        setSongs((current) => sortSongMetas([copyMeta, ...current]));
+        router.push(`/songs/${copyMeta.id}`);
+      })
+      .catch((error) => {
+        console.error("Could not duplicate song", error);
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not duplicate the song. Please try again.",
+        );
+      });
+  }
+
+  function handleDelete(songMeta: SongMeta) {
+    if (!workspaceId) {
+      return;
+    }
+
+    if (!window.confirm(`Delete "${songMeta.title || "Untitled Song"}"?`)) {
+      return;
+    }
+
+    // Optimistic removal; restore on failure.
+    const previousSongs = songs;
+    setSongs((current) => current.filter((item) => item.id !== songMeta.id));
+
+    deleteCloudSong(workspaceId, songMeta.id).catch((error) => {
+      console.error("Could not delete song", error);
+      setSongs(previousSongs);
+      toast.error(
+        error instanceof Error ? error.message : "Could not delete the song. Please try again.",
+      );
+    });
+
+    if (songMeta.id === activeSongId) {
       router.push("/");
     }
   }
@@ -273,7 +335,7 @@ export function AppShell({
               type="button"
               className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
-              <Clock data-icon="inline-start" />
+              <ClockIcon data-icon="inline-start" />
               Recent
             </button>
             <button
@@ -302,72 +364,124 @@ export function AppShell({
         </div>
         <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
           <div className="flex flex-col gap-1">
-            {visibleSongs.map((song) => {
-              const isActive = song.id === activeSongId;
-              const metadata = songMetadata(song);
-
-              return (
-                <div
-                  key={song.id}
-                  className={cn(
-                    "group/song flex items-center gap-1 rounded-2xl px-2 py-1 transition",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/70",
-                  )}
-                >
-                  <Link
-                    href={`/songs/${song.id}`}
-                    onClick={() => setIsSidebarOpen(false)}
-                    className="min-w-0 flex-1 rounded-xl px-2 py-2"
-                  >
-                    <span className="block truncate text-sm font-medium">
-                      {song.title || "Untitled Song"}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {metadata || `Updated ${formatUpdated(song.updatedAt)}`}
-                    </span>
-                  </Link>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          className="opacity-70 transition group-hover/song:opacity-100"
-                        />
-                      }
-                    >
-                      <MoreHorizontal />
-                      <span className="sr-only">Song actions</span>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem onClick={() => handleDuplicate(song)}>
-                          <Copy data-icon="inline-start" />
-                          Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onClick={() => handleDelete(song)}
-                        >
-                          <Trash data-icon="inline-start" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              );
-            })}
-            {visibleSongs.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No songs match that search.
+            {isLoadingSongs ? (
+              <div className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading songs...
               </div>
-            ) : null}
+            ) : cloudError ? (
+              <div className="px-4 py-8 text-sm text-destructive">
+                <CloudOff className="mb-2 size-4" />
+                {cloudError}
+              </div>
+            ) : (
+              <>
+                {visibleSongs.map((song) => {
+                  const isActive = song.id === activeSongId;
+                  const metadata = songMetadata(song);
+
+                  return (
+                    <div
+                      key={song.id}
+                      className={cn(
+                        "group/song flex items-center gap-1 rounded-2xl px-2 py-1 transition",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+                      )}
+                    >
+                      <Link
+                        href={`/songs/${song.id}`}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className="min-w-0 flex-1 rounded-xl px-2 py-2"
+                      >
+                        <span className="block truncate text-sm font-medium">
+                          {song.title || "Untitled Song"}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {metadata || `Updated ${formatUpdated(song.updatedAt)}`}
+                        </span>
+                      </Link>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="opacity-70 transition group-hover/song:opacity-100"
+                            />
+                          }
+                        >
+                          <MoreHorizontal />
+                          <span className="sr-only">Song actions</span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuGroup>
+                            <DropdownMenuItem onClick={() => handleDuplicate(song)}>
+                              <Copy data-icon="inline-start" />
+                              Duplicate
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => handleDelete(song)}
+                            >
+                              <Trash data-icon="inline-start" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  );
+                })}
+                {visibleSongs.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No songs match that search.
+                  </div>
+                ) : null}
+              </>
+            )}
           </div>
         </ScrollArea>
+
+        <Separator className="my-3" />
+
+        <div className="px-4 pb-4">
+          {user ? (
+            <div className="flex items-center gap-2 rounded-2xl px-2 py-1">
+              <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
+                {user.photoURL ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={user.photoURL} alt="" className="size-8" referrerPolicy="no-referrer" />
+                ) : (
+                  (user.displayName || user.email || "?").charAt(0).toUpperCase()
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium text-sidebar-foreground">
+                  {user.displayName || user.email}
+                </span>
+                {user.displayName && user.email ? (
+                  <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                ) : null}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  signOutUser().catch((error) => {
+                    console.error("Sign out failed", error);
+                    toast.error("Sign out failed. Please try again.");
+                  });
+                }}
+              >
+                Sign out
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
     );
   }
@@ -406,7 +520,7 @@ export function AppShell({
                 {currentSong?.title || "ChoirScript"}
               </p>
               <p className="hidden truncate text-xs text-muted-foreground sm:block">
-                {currentSong ? songMetadata(currentSong) || "No metadata yet" : "Local choir scripts"}
+                {currentSong ? songMetadata(currentSong) || "No metadata yet" : "Cloud choir scripts"}
               </p>
             </div>
 
@@ -451,7 +565,23 @@ export function AppShell({
                           Save now
                         </DropdownMenuItem>
                       ) : null}
-                      <DropdownMenuItem onClick={() => handleDuplicate(currentSong)}>
+                      <DropdownMenuItem
+                        onClick={() =>
+                          handleDuplicate({
+                            id: currentSong.id,
+                            title: currentSong.title,
+                            artist: currentSong.artist,
+                            key: currentSong.key,
+                            tempo: currentSong.tempo,
+                            mode: currentSong.mode,
+                            createdAt: currentSong.createdAt,
+                            updatedAt: currentSong.updatedAt,
+                            createdBy: user?.uid ?? "",
+                            updatedBy: user?.uid ?? "",
+                            schemaVersion: 1,
+                          })
+                        }
+                      >
                         <Copy data-icon="inline-start" />
                         Duplicate song
                       </DropdownMenuItem>
@@ -475,7 +605,21 @@ export function AppShell({
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={() => handleDelete(currentSong)}
+                        onClick={() =>
+                          handleDelete({
+                            id: currentSong.id,
+                            title: currentSong.title,
+                            artist: currentSong.artist,
+                            key: currentSong.key,
+                            tempo: currentSong.tempo,
+                            mode: currentSong.mode,
+                            createdAt: currentSong.createdAt,
+                            updatedAt: currentSong.updatedAt,
+                            createdBy: user?.uid ?? "",
+                            updatedBy: user?.uid ?? "",
+                            schemaVersion: 1,
+                          })
+                        }
                       >
                         <Trash data-icon="inline-start" />
                         Delete song

@@ -4,6 +4,7 @@ import { Geist } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
+import { AuthProvider } from "@/lib/firebase/AuthContext";
 
 const geist = Geist({
   subsets: ["latin"],
@@ -23,7 +24,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={cn("dark h-full", geist.variable)}>
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground antialiased">
-        <TooltipProvider>{children}</TooltipProvider>
+        <AuthProvider>
+          <TooltipProvider>{children}</TooltipProvider>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

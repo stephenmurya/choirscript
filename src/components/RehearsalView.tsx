@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSongById } from "@/lib/songStorage";
+import { normalizeSong } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
+import { getSong } from "@/lib/firebase/songs";
+import { useAuth } from "@/lib/firebase/AuthContext";
 import type { Song } from "@/lib/songTypes";
 import { Switch } from "@/components/ui/switch";
 import { AdvancedTimingRehearsalView } from "./AdvancedTimingRehearsalView";
@@ -32,7 +34,10 @@ const toggleLabels: Array<{
 ];
 
 export function RehearsalView({ songId }: RehearsalViewProps) {
+  const { workspaceId } = useAuth();
   const [song, setSong] = useState<Song | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [toggles, setToggles] = useState<RehearsalDisplayToggles>({
     soprano: true,
@@ -46,17 +51,44 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
   });
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      const loadedSong = getSongById(songId);
-      setSong(loadedSong ?? null);
-      if (loadedSong) {
-        setToggles((current) => ({ ...current, bass: songHasBass(loadedSong) }));
-      }
-      setLoaded(true);
-    }, 0);
+    if (!workspaceId) {
+      return;
+    }
 
-    return () => window.clearTimeout(timeoutId);
-  }, [songId]);
+    let cancelled = false;
+
+    getSong(workspaceId, songId)
+      .then((cloudSong) => {
+        if (cancelled) {
+          return;
+        }
+
+        if (!cloudSong) {
+          setNotFound(true);
+        } else {
+          // Canonical sanitizer/migration boundary before render state.
+          const normalizedSong = normalizeSong(cloudSong);
+          setSong(normalizedSong);
+          setToggles((current) => ({ ...current, bass: songHasBass(normalizedSong) }));
+        }
+        setLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Could not load song for rehearsal view", error);
+        if (!cancelled) {
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Could not load the song. Check your connection and try again.",
+          );
+          setLoaded(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, songId]);
 
   if (!loaded) {
     return (
@@ -66,13 +98,30 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
     );
   }
 
-  if (!song) {
+  if (loadError) {
+    return (
+      <main className="min-h-screen bg-background px-4 py-12 text-foreground">
+        <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-semibold">Couldn&apos;t load this song</h1>
+          <p className="mt-3 text-muted-foreground">{loadError}</p>
+          <Link
+            href="/"
+            className="mt-6 inline-flex rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (!song || notFound) {
     return (
       <main className="min-h-screen bg-background px-4 py-12 text-foreground">
         <div className="mx-auto max-w-xl rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <h1 className="text-2xl font-semibold">Song not found</h1>
           <p className="mt-3 text-muted-foreground">
-            This song may have been deleted from localStorage.
+            This song may have been deleted from your workspace.
           </p>
           <Link
             href="/"
