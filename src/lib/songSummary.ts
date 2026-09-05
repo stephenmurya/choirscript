@@ -1,5 +1,6 @@
 import type { Song, SongSection } from "@/lib/songTypes";
 import type { SongCardSummary, SongModuleKey } from "@/lib/firebase/types";
+import { hasMeaningfulArrangement } from "@/lib/arrangement";
 
 /**
  * Song card summary derivation.
@@ -64,18 +65,22 @@ export function deriveSongModulePresence(song: Song): SongModuleKey[] {
 
   // LYRICS — present when the song contains meaningful lyric text (not just
   // an empty default section/object).
-  if (song.sections.some(sectionHasLyrics)) {
+  if (song.source.sections.some(sectionHasLyrics)) {
     modules.push("lyrics");
   }
 
   // VOCAL PARTS — present when real SATB cues exist on any syllable (not
   // merely because the SATB fields structurally exist).
-  if (song.sections.some(sectionHasVocalPartCues)) {
+  if (song.source.sections.some(sectionHasVocalPartCues)) {
     modules.push("vocalParts");
   }
 
-  // ARRANGEMENT / BAND / PRODUCTION — not implemented yet. Never fake data:
-  // presence will be added by their future save-path derivations.
+  if (hasMeaningfulArrangement(song)) {
+    modules.push("arrangement");
+  }
+
+  // BAND / PRODUCTION are not implemented yet. Never fake data: presence will
+  // be added by their future save-path derivations.
 
   return modules;
 }
@@ -90,7 +95,7 @@ export function buildSongCardSummary(
   contributor: { uid: string; displayName: string; photoURL?: string },
 ): SongCardSummary {
   return {
-    version: 1,
+    version: 2,
     modules: deriveSongModulePresence(song),
     contributors: {
       total: contributor.uid ? 1 : 0,

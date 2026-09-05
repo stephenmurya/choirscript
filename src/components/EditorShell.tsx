@@ -10,6 +10,7 @@ import {
   Copy,
   Eye,
   FileText,
+  ListMusic,
   Music2,
   PanelLeft,
   Printer,
@@ -34,19 +35,21 @@ import { ShareDialog } from "./ShareDialog";
 type EditorShellProps = {
   song: Song | null;
   saveStatus: string;
+  activeView: "source" | "arrangement";
   children: ReactNode;
 };
 
 /**
  * Focused editor shell: AppShell's top navbar plus a CURRENT-SONG sidebar
- * (Back to workspace, song identity, Script/Rehearsal navigation, Share /
+ * (Back to workspace, song identity, Source/Arrangement/Rehearsal navigation, Share /
  * Print / Duplicate actions, Delete in the danger zone). No song library in
  * the editor sidebar. The EDIT group is structured so Phase 3 can add
- * Source/Arrangement entries alongside Script.
+ * Source/Arrangement entries in the EDIT group.
  */
 export function EditorShell({
   song,
   saveStatus,
+  activeView,
   children,
 }: EditorShellProps) {
   const router = useRouter();
@@ -143,11 +146,18 @@ export function EditorShell({
               </p>
               <nav className="flex flex-col gap-1">
                 <Link
-                  href={`/songs/${song.id}`}
-                  className="flex h-9 items-center gap-2 rounded-xl bg-sidebar-accent px-3 text-sm font-medium text-sidebar-accent-foreground"
+                  href={`/songs/${song.id}?view=source`}
+                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${activeView === "source" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground"}`}
                 >
                   <FileText data-icon="inline-start" />
-                  Script
+                  Source
+                </Link>
+                <Link
+                  href={`/songs/${song.id}?view=arrangement`}
+                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${activeView === "arrangement" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground"}`}
+                >
+                  <ListMusic data-icon="inline-start" />
+                  Arrangement
                 </Link>
               </nav>
 

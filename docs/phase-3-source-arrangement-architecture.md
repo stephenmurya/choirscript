@@ -60,10 +60,10 @@ Everything — lyrics, notation, annotations, and all timing — lives in **one 
    (`lyrics`, `vocalParts`, `arrangement`, `band`, `production`), derived in `songSummary.ts` at
    save time. `arrangement` currently always derives `false`.
 8. **Persistence:** `workspaces/{wid}/songs/{sid}` (metadata incl. `cardSummary`) +
-   `document/current` (`{ schemaVersion: 1, song }`). Autosave = debounced whole-aggregate
+   `document/current` (`{ schemaVersion: 2, song }`; legacy envelopes remain readable). Autosave = debounced whole-aggregate
    `setDoc` batch of both. `normalizeSong()` is the single canonical sanitize/migrate boundary,
    applied on every load and save.
-9. **Share:** immutable `{ schemaVersion: 1, shareId, title, artist, key, bpm, song }` snapshots in
+9. **Share:** immutable `{ schemaVersion: 2, shareId, title, artist, key, bpm, song }` snapshots in
    Vercel Blob; `/s/[shareId]` renders `ColorfulRehearsalView`/`AdvancedTimingRehearsalView` directly
    from the snapshot's `song`.
 10. **Editor mutation surface:** `SongEditor` owns ~15 mutation handlers; all operate via
@@ -269,7 +269,11 @@ the concept buys nothing and risks churn across ~10 components. Cheapest correct
 - **Source section deleted:** occurrences referencing it are **deleted with it** (cascade), never
   left dangling. `normalizeSong()` additionally drops any dangling occurrence it finds (defense in
   depth) — silent danglers are forbidden. UI: deleting a Source section that is placed N times
-  must warn "this removes N placements from the arrangement."
+  must explicitly state the usage count and explain that the placements will also be removed;
+  confirmation is required. Cancelling leaves Source, occurrences, and timing unchanged. After
+  confirmation, the Source section is deleted, all referencing occurrences are removed, and timing
+  entries for the deleted Source lines are cleaned. Removing an Arrangement occurrence remains a
+  separate non-destructive operation and never deletes Source content.
 - **Occurrence removed:** removes only the placement; Source section always survives.
 
 ---
@@ -400,7 +404,8 @@ song.schemaVersion = 2;                   // then existing per-section normaliza
 - **Rollback:** code rollback is safe — schemaVersion 2 documents contain all schemaVersion 1
   content (sections array is fully preserved inside `source.sections`; old code that reads
   `song.sections` would simply see it missing, so a rollback shim would read `song.source?.sections ?? song.sections`).
-- **Deletion behavior** (§H) is part of normalization, not just UI.
+- **Deletion behavior** (§H) is enforced by the Source editor mutation boundary; normalization
+  defensively removes dangling occurrence references but does not invent a destructive delete.
 
 ---
 

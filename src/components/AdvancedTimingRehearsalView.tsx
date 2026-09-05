@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { PART_LABELS } from "@/lib/annotationUtils";
+import { resolveArrangement } from "@/lib/arrangement";
 import type { PartKey, Song, SongLine, TimingEvent, TimingScope } from "@/lib/songTypes";
 import {
   getBarUnits,
@@ -99,11 +100,13 @@ function ReadOnlyPartValue({
 function RehearsalTimingLine({
   song,
   sectionId,
+  occurrenceId,
   line,
   toggles,
 }: {
   song: Song;
   sectionId: string;
+  occurrenceId: string;
   line: SongLine;
   toggles: RehearsalDisplayToggles;
 }) {
@@ -141,7 +144,7 @@ function RehearsalTimingLine({
 
             return (
               <div
-                key={bar.id}
+                key={`${occurrenceId}:${bar.id}`}
                 className="flex min-h-8 items-center justify-center rounded-md border border-border bg-muted px-2 text-xs font-semibold text-muted-foreground"
                 style={{ gridColumn: `${start + 2} / span ${barUnits}`, gridRow: 1 }}
               >
@@ -157,7 +160,7 @@ function RehearsalTimingLine({
 
               return (
                 <div
-                  key={`${bar.id}-${unitIndex}`}
+                  key={`${occurrenceId}:${bar.id}-${unitIndex}`}
                   className="flex min-h-7 items-center justify-center rounded-md bg-muted/50 text-xs font-medium text-muted-foreground"
                   style={{ gridColumn: absoluteUnit + 2, gridRow: 2 }}
                 >
@@ -173,7 +176,7 @@ function RehearsalTimingLine({
 
             return (
               <div
-                key={event.id}
+                key={`${occurrenceId}:${event.id}`}
                 style={{ gridColumn: `${start + 2} / span ${event.durationUnits}`, gridRow: 3 }}
               >
                 <ScriptPill
@@ -192,7 +195,7 @@ function RehearsalTimingLine({
 
             return (
               <div
-                key={`lyrics-${event.id}`}
+                key={`${occurrenceId}:lyrics-${event.id}`}
                 className="flex min-h-8 items-center justify-center text-sm font-medium text-foreground"
                 style={{ gridColumn: `${start + 2} / span ${event.durationUnits}`, gridRow: 4 }}
               >
@@ -219,7 +222,7 @@ function RehearsalTimingLine({
             const gridRow = partRowStart + rowIndex;
 
             return (
-              <Fragment key={row.key}>
+              <Fragment key={`${occurrenceId}:${row.key}`}>
                 <div
                   className="sticky left-0 z-30 grid min-h-8 place-items-center rounded-md border border-border bg-background px-2 text-xs font-semibold text-muted-foreground shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]"
                   style={{ gridColumn: 1, gridRow }}
@@ -232,7 +235,7 @@ function RehearsalTimingLine({
 
                   return (
                     <div
-                      key={`${row.key}-${event.id}`}
+                      key={`${occurrenceId}:${row.key}-${event.id}`}
                       className="grid justify-items-center"
                       style={{
                         gridColumn: `${start + 2} / span ${event.durationUnits}`,
@@ -291,14 +294,18 @@ export function AdvancedTimingRehearsalView({
       </div>
 
       <div className="flex flex-col gap-8">
-        {song.sections.map((section) => (
-          <section key={section.id} className="rehearsal-section border-b border-border pb-8 last:border-b-0">
+        {resolveArrangement(song).map(({ occurrenceId, section }) => (
+          <section
+            key={occurrenceId}
+            className="rehearsal-section border-b border-border pb-8 last:border-b-0"
+          >
             <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
             {section.lines.map((line) => (
               <RehearsalTimingLine
-                key={line.id}
+                key={`${occurrenceId}:${line.id}`}
                 song={song}
                 sectionId={section.id}
+                occurrenceId={occurrenceId}
                 line={line}
                 toggles={toggles}
               />

@@ -1,16 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
+  createId,
   createEmptySection,
+  createDefaultArrangement,
   createLineFromText,
   createSyllableToken,
   normalizeSong,
 } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
+import {
+  appendOccurrence,
+  countOccurrencesForSection,
+  deleteSourceSectionWithOccurrences,
+  moveOccurrence,
+  removeOccurrence,
+  setOccurrenceNote,
+} from "@/lib/arrangement";
 import {
   getSongWithMeta,
   saveSong as saveCloudSong,
@@ -45,6 +56,7 @@ import {
 } from "@/components/ui/card";
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
 import { EditorShell } from "./EditorShell";
+import { ArrangementEditor } from "./ArrangementEditor";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 type SongEditorProps = {
   songId: string;
@@ -55,6 +67,8 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed";
 const AUTOSAVE_DEBOUNCE_MS = 700;
 
 export function SongEditor({ songId }: SongEditorProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, workspaceId } = useAuth();
   const [song, setSong] = useState<Song | null>(null);
   const [songMeta, setSongMeta] = useState<SongMeta | null>(null);
@@ -67,6 +81,7 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
+  const editorView = searchParams.get("view") === "arrangement" ? "arrangement" : "source";
 
   const uid = user?.uid ?? null;
   const activeWorkspaceId = workspaceId;
@@ -113,7 +128,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         setSong(normalizedSong);
         setSongMeta(result.meta);
         setIncludeBass(songHasBass(normalizedSong));
-        setActiveSectionId(normalizedSong.sections[0]?.id ?? null);
+        setActiveSectionId(normalizedSong.source.sections[0]?.id ?? null);
         hasLoaded.current = true;
         setSaveState("saved");
       })
@@ -263,34 +278,105 @@ export function SongEditor({ songId }: SongEditorProps) {
   function handleRenameSection(sectionId: string, name: string) {
     updateSong((current) => ({
       ...current,
-      sections: current.sections.map((section) =>
-        section.id === sectionId ? { ...section, name } : section,
-      ),
+      source: {
+        sections: current.source.sections.map((section) =>
+          section.id === sectionId ? { ...section, name } : section,
+        ),
+      },
     }));
+  }
+
+  function handleDeleteSection(sectionId: string) {
+    if (!song) {
+      return;
+    }
+
+    const section = song.source.sections.find((candidate) => candidate.id === sectionId);
+    if (!section) {
+      return;
+    }
+
+    const usageCount = countOccurrencesForSection(song, sectionId);
+    const message = usageCount > 0
+      ? `${section.name} is used ${usageCount} time${usageCount === 1 ? "" : "s"} in the current arrangement. Deleting the Source section will also remove those occurrence${usageCount === 1 ? "" : "s"}. Continue?`
+      : `Delete the Source section ${section.name}? This cannot be undone.`;
+
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    const remainingSectionId = song.source.sections.find(
+      (candidate) => candidate.id !== sectionId,
+    )?.id ?? null;
+    updateSong((current) => deleteSourceSectionWithOccurrences(current, sectionId));
+    setActiveSectionId((current) => (current === sectionId ? remainingSectionId : current));
+    setFocusedSectionId(null);
+  }
+
+  function handleAddOccurrence(sourceSectionId: string) {
+    updateSong((current) => appendOccurrence(current, sourceSectionId));
+  }
+
+  function handleRemoveOccurrence(occurrenceId: string) {
+    updateSong((current) => removeOccurrence(current, occurrenceId));
+  }
+
+  function handleMoveOccurrence(occurrenceId: string, direction: "up" | "down") {
+    updateSong((current) => moveOccurrence(current, occurrenceId, direction));
+  }
+
+  function handleSetOccurrenceNote(occurrenceId: string, note: string) {
+    updateSong((current) => setOccurrenceNote(current, occurrenceId, note));
+  }
+
+  function handleEditSource(sourceSectionId: string) {
+    setActiveSectionId(sourceSectionId);
+    setFocusedSectionId(sourceSectionId);
+    router.push(`/songs/${songId}?view=source`);
   }
 
   function handleCreateSectionAfter(sectionId: string | null) {
     const section = createEmptySection("New Section");
 
     updateSong((current) => {
-      if (!sectionId) {
-        return { ...current, sections: [...current.sections, section] };
-      }
+      const insertSections = (sections: typeof current.source.sections) => {
+        if (!sectionId) {
+          return [...sections, section];
+        }
 
-      const sectionIndex = current.sections.findIndex((item) => item.id === sectionId);
+        const sectionIndex = sections.findIndex((item) => item.id === sectionId);
 
-      if (sectionIndex === -1) {
-        return { ...current, sections: [...current.sections, section] };
-      }
+        if (sectionIndex === -1) {
+          return [...sections, section];
+        }
 
-      return {
-        ...current,
-        sections: [
-          ...current.sections.slice(0, sectionIndex + 1),
+        return [
+          ...sections.slice(0, sectionIndex + 1),
           section,
-          ...current.sections.slice(sectionIndex + 1),
-        ],
+          ...sections.slice(sectionIndex + 1),
+        ];
       };
+
+      // Phase 3: a newly created Source section also enters the active
+      // arrangement (architecture §H) — preserving the old behavior where
+      // new content appeared in the script.
+      const sectionWithOccurrence = {
+        ...current,
+        source: { sections: insertSections(current.source.sections) },
+        arrangements: current.arrangements.map((arrangement) =>
+          arrangement.id === current.activeArrangementId
+            ? {
+                ...arrangement,
+                occurrences: [
+                  ...arrangement.occurrences,
+                  { id: createId("occ"), sourceSectionId: section.id },
+                ],
+              }
+            : arrangement,
+        ),
+      };
+
+      return sectionWithOccurrence;
     });
     setActiveSectionId(section.id);
     setFocusedSectionId(section.id);
@@ -302,11 +388,13 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => {
       const nextSong = {
         ...current,
-        sections: current.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, lines: [...section.lines, line] }
-            : section,
-        ),
+        source: {
+          sections: current.source.sections.map((section) =>
+            section.id === sectionId
+              ? { ...section, lines: [...section.lines, line] }
+              : section,
+          ),
+        },
       };
 
       return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
@@ -326,23 +414,31 @@ export function SongEditor({ songId }: SongEditorProps) {
     }
 
     updateSong((current) => {
-      if (current.sections.length === 0) {
+      if (current.source.sections.length === 0) {
         const section = createEmptySection("Verse 1");
         section.lines = lines;
         setActiveSectionId(section.id);
-        const nextSong = { ...current, sections: [section] };
+        const arrangement = createDefaultArrangement([section]);
+        const nextSong: Song = {
+          ...current,
+          source: { sections: [section] },
+          arrangements: [arrangement],
+          activeArrangementId: arrangement.id,
+        };
         return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
       }
 
-      const targetSectionId = activeSectionId ?? current.sections[0].id;
+      const targetSectionId = activeSectionId ?? current.source.sections[0].id;
 
       const nextSong = {
         ...current,
-        sections: current.sections.map((section) =>
-          section.id === targetSectionId
-            ? { ...section, lines: [...section.lines, ...lines] }
-            : section,
-        ),
+        source: {
+          sections: current.source.sections.map((section) =>
+            section.id === targetSectionId
+              ? { ...section, lines: [...section.lines, ...lines] }
+              : section,
+          ),
+        },
       };
 
       return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
@@ -371,48 +467,50 @@ export function SongEditor({ songId }: SongEditorProps) {
   ) {
     updateSong((current) => ({
       ...current,
-      sections: current.sections.map((section) =>
-        section.id === sectionId
-          ? {
-              ...section,
-              lines: section.lines.map((line) =>
-                line.id === lineId
-                  ? (() => {
-                      const words = line.words.map((word) =>
-                        word.id === wordId
-                          ? {
-                              ...word,
-                              syllables: syllables.map((text, index) => {
-                                const existing = word.syllables[index];
-                                return existing
-                                  ? { ...existing, text }
-                                  : createSyllableToken(text);
-                              }),
-                            }
-                          : word,
-                      );
-                      const validSyllableIds = new Set(
-                        words.flatMap((word) => word.syllables.map((syllable) => syllable.id)),
-                      );
+      source: {
+        sections: current.source.sections.map((section) =>
+          section.id === sectionId
+            ? {
+                ...section,
+                lines: section.lines.map((line) =>
+                  line.id === lineId
+                    ? (() => {
+                        const words = line.words.map((word) =>
+                          word.id === wordId
+                            ? {
+                                ...word,
+                                syllables: syllables.map((text, index) => {
+                                  const existing = word.syllables[index];
+                                  return existing
+                                    ? { ...existing, text }
+                                    : createSyllableToken(text);
+                                }),
+                              }
+                            : word,
+                        );
+                        const validSyllableIds = new Set(
+                          words.flatMap((word) => word.syllables.map((syllable) => syllable.id)),
+                        );
 
-                      return {
-                        ...line,
-                        words,
-                        annotations: line.annotations
-                          .map((annotation) => ({
-                            ...annotation,
-                            syllableIds: annotation.syllableIds.filter((id) =>
-                              validSyllableIds.has(id),
-                            ),
-                          }))
-                          .filter((annotation) => annotation.syllableIds.length > 0),
-                      };
-                    })()
-                  : line,
-              ),
-            }
-          : section,
-      ),
+                        return {
+                          ...line,
+                          words,
+                          annotations: line.annotations
+                            .map((annotation) => ({
+                              ...annotation,
+                              syllableIds: annotation.syllableIds.filter((id) =>
+                                validSyllableIds.has(id),
+                              ),
+                            }))
+                            .filter((annotation) => annotation.syllableIds.length > 0),
+                        };
+                      })()
+                    : line,
+                ),
+              }
+            : section,
+        ),
+      },
     }));
   }
 
@@ -425,31 +523,33 @@ export function SongEditor({ songId }: SongEditorProps) {
   ) {
     updateSong((current) => ({
       ...current,
-      sections: current.sections.map((section) =>
-        section.id === sectionId
-          ? {
-              ...section,
-              lines: section.lines.map((line) =>
-                line.id === lineId
-                  ? {
-                      ...line,
-                      words: line.words.map((word) => ({
-                        ...word,
-                        syllables: word.syllables.map((syllable) =>
-                          syllable.id === syllableId
-                            ? {
-                                ...syllable,
-                                [part]: part === "bass" && value.trim() === "" ? undefined : value,
-                              }
-                            : syllable,
-                        ),
-                      })),
-                    }
-                  : line,
-              ),
-            }
-          : section,
-      ),
+      source: {
+        sections: current.source.sections.map((section) =>
+          section.id === sectionId
+            ? {
+                ...section,
+                lines: section.lines.map((line) =>
+                  line.id === lineId
+                    ? {
+                        ...line,
+                        words: line.words.map((word) => ({
+                          ...word,
+                          syllables: word.syllables.map((syllable) =>
+                            syllable.id === syllableId
+                              ? {
+                                  ...syllable,
+                                  [part]: part === "bass" && value.trim() === "" ? undefined : value,
+                                }
+                              : syllable,
+                          ),
+                        })),
+                      }
+                    : line,
+                ),
+              }
+            : section,
+        ),
+      },
     }));
   }
 
@@ -478,6 +578,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       <EditorShell
         song={song}
         saveStatus={saveStatus}
+        activeView={editorView}
       >
         {content}
       </EditorShell>
@@ -538,7 +639,16 @@ export function SongEditor({ songId }: SongEditorProps) {
           Save now
         </Button>
       </div>
-      <DocumentScriptEditor
+      {editorView === "arrangement" ? (
+        <ArrangementEditor
+          song={song}
+          onAddOccurrence={handleAddOccurrence}
+          onRemoveOccurrence={handleRemoveOccurrence}
+          onMoveOccurrence={handleMoveOccurrence}
+          onSetOccurrenceNote={handleSetOccurrenceNote}
+          onEditSource={handleEditSource}
+        />
+      ) : <DocumentScriptEditor
       song={song}
       includeBass={includeBass}
       selection={lyricSelection}
@@ -546,6 +656,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       onSectionFocusHandled={() => setFocusedSectionId(null)}
       onMetadataChange={handleMetadataChange}
       onRenameSection={handleRenameSection}
+      onDeleteSection={handleDeleteSection}
       onCreateSectionAfter={handleCreateSectionAfter}
       onAddLine={handleAddLine}
       onGenerateScript={handleGenerateScript}
@@ -566,7 +677,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       onRemoveTechnique={handleRemoveTechnique}
       onUpdateWordSyllables={handleUpdateWordSyllables}
       onPartCueChange={handlePartCueChange}
-      />
+      />}
     </div>,
   );
 }

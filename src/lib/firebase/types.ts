@@ -32,7 +32,7 @@ export type SongContributorPreview = {
  *   collaboration logic existing yet.
  */
 export type SongCardSummary = {
-  version: 1;
+  version: 2;
   modules: SongModuleKey[];
   contributors: {
     total: number;
@@ -88,7 +88,7 @@ export type SongMeta = {
 };
 
 export type SongDocument = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   song: Song;
   updatedAt: string;
   updatedBy: string;

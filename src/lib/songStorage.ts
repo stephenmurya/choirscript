@@ -1,10 +1,12 @@
 import { DEFAULT_TECHNIQUES } from "./defaultTechniques";
 import { splitWordIntoSyllables } from "./syllableSplitter";
 import { DEFAULT_TIMING_SETTINGS, ensureTimingForSong, migrateSongTiming } from "./timing";
+import { migrateSongToSourceArrangement } from "./arrangement";
 import type {
+  Arrangement,
   Song,
   SongLine,
-  SongSection,
+  SourceSection,
   SyllableToken,
   TechniqueAnnotation,
   WordToken,
@@ -53,7 +55,7 @@ export function createLineFromText(text: string): SongLine {
   };
 }
 
-export function createEmptySection(name = "Verse 1"): SongSection {
+export function createEmptySection(name = "Verse 1"): SourceSection {
   return {
     id: createId("section"),
     name,
@@ -61,8 +63,20 @@ export function createEmptySection(name = "Verse 1"): SongSection {
   };
 }
 
+export function createDefaultArrangement(sections: SourceSection[]): Arrangement {
+  return {
+    id: createId("arr"),
+    name: "Default",
+    occurrences: sections.map((section) => ({
+      id: createId("occ"),
+      sourceSectionId: section.id,
+    })),
+  };
+}
+
 export function createEmptySong(): Song {
   const now = new Date().toISOString();
+  const arrangement = createDefaultArrangement([]);
 
   return {
     id: createId("song"),
@@ -72,11 +86,14 @@ export function createEmptySong(): Song {
     tempo: "",
     notes: "",
     mode: "simple",
-    sections: [createEmptySection()],
+    source: { sections: [] },
+    arrangements: [arrangement],
+    activeArrangementId: arrangement.id,
     timingSettings: DEFAULT_TIMING_SETTINGS,
     timingByLine: {},
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 2,
   };
 }
 
@@ -174,6 +191,13 @@ export function createSampleSong(): Song {
   flattenLineSyllables(verseLines[0])[2].directorNote = "Keep the vowel tall.";
   flattenLineSyllables(verseLines[2])[6].directorNote = "Clean cutoff together.";
 
+  const section: SourceSection = {
+    id: createId("section"),
+    name: "Verse 1",
+    lines: verseLines,
+  };
+  const arrangement = createDefaultArrangement([section]);
+
   return {
     id: createId("song"),
     title: "Amazing Grace Demo",
@@ -182,17 +206,14 @@ export function createSampleSong(): Song {
     tempo: "Slow 72 BPM",
     notes: "Teach the melody by call-and-response, then add harmony cues one line at a time.",
     mode: "simple",
-    sections: [
-      {
-        id: createId("section"),
-        name: "Verse 1",
-        lines: verseLines,
-      },
-    ],
+    source: { sections: [section] },
+    arrangements: [arrangement],
+    activeArrangementId: arrangement.id,
     timingSettings: DEFAULT_TIMING_SETTINGS,
     timingByLine: {},
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 2,
   };
 }
 
@@ -235,9 +256,18 @@ function normalizeCueValue(value?: string) {
  * Canonical sanitizer/migration boundary for song content. Runs on every
  * local load, cloud load and save. Kept independent of localStorage so the
  * cloud repository can reuse it.
+ *
+ * Schema migration v1→v2 (Phase 3, Source/Arrangement) happens here first:
+ * v1 songs get source.sections (moved by reference — IDs preserved) plus a
+ * default arrangement mirroring the existing order. Idempotent: already-v2
+ * songs pass through unchanged, so repeated normalize calls never create
+ * additional arrangements/occurrences. See docs/phase-3-... §L.
  */
-export function normalizeSong(song: Song): Song {
+export function normalizeSong(input: Song): Song {
   const now = new Date().toISOString();
+
+  // ── v1 → v2 structural migration (by reference; no content rewrite) ──
+  const song = migrateSongToSourceArrangement(input as Song & { sections?: SourceSection[] });
 
   const normalizedSong = migrateSongTiming({
     ...song,
@@ -245,48 +275,97 @@ export function normalizeSong(song: Song): Song {
     title: (song.title ?? "").trim() || "Untitled Song",
     updatedAt: song.updatedAt || now,
     createdAt: song.createdAt || now,
-    sections: (song.sections ?? []).map((section, sectionIndex) => ({
-      ...section,
-      id: section.id || createId("section"),
-      name: section.name || `Section ${sectionIndex + 1}`,
-      lines: (section.lines ?? []).map((line) => {
-        const words = (line.words ?? []).map((word) => ({
-          ...word,
-          id: word.id || createId("word"),
-          originalWord: word.originalWord ?? "",
-          syllables: (word.syllables ?? []).map((syllable) => ({
-            ...syllable,
-            id: syllable.id || createId("syllable"),
-            text: syllable.text ?? "",
-            soprano: normalizeCueValue(syllable.soprano),
-            alto: normalizeCueValue(syllable.alto),
-            tenor: normalizeCueValue(syllable.tenor),
-            bass: syllable.bass ? normalizeCueValue(syllable.bass) : undefined,
-            techniques: syllable.techniques ?? [],
-          })),
-        }));
-        const validSyllableIds = new Set(
-          words.flatMap((word) => word.syllables.map((syllable) => syllable.id)),
-        );
+    schemaVersion: 2,
+    source: {
+      sections: (song.source?.sections ?? []).map((section, sectionIndex) => ({
+        ...section,
+        id: section.id || createId("section"),
+        name: section.name || `Section ${sectionIndex + 1}`,
+        lines: (section.lines ?? []).map((line) => {
+          const words = (line.words ?? []).map((word) => ({
+            ...word,
+            id: word.id || createId("word"),
+            originalWord: word.originalWord ?? "",
+            syllables: (word.syllables ?? []).map((syllable) => ({
+              ...syllable,
+              id: syllable.id || createId("syllable"),
+              text: syllable.text ?? "",
+              soprano: normalizeCueValue(syllable.soprano),
+              alto: normalizeCueValue(syllable.alto),
+              tenor: normalizeCueValue(syllable.tenor),
+              bass: syllable.bass ? normalizeCueValue(syllable.bass) : undefined,
+              techniques: syllable.techniques ?? [],
+            })),
+          }));
+          const validSyllableIds = new Set(
+            words.flatMap((word) => word.syllables.map((syllable) => syllable.id)),
+          );
 
-        return {
-          ...line,
-          id: line.id || createId("line"),
-          words,
-          annotations: migrateLineAnnotations({ ...line, words })
-            .map((annotation) => ({
-              ...annotation,
-              syllableIds: annotation.syllableIds.filter((id) => validSyllableIds.has(id)),
-            }))
-            .filter((annotation) => annotation.syllableIds.length > 0),
-        };
-      }),
-    })),
+          return {
+            ...line,
+            id: line.id || createId("line"),
+            words,
+            annotations: migrateLineAnnotations({ ...line, words })
+              .map((annotation) => ({
+                ...annotation,
+                syllableIds: annotation.syllableIds.filter((id) => validSyllableIds.has(id)),
+              }))
+              .filter((annotation) => annotation.syllableIds.length > 0),
+          };
+        }),
+      })),
+    },
   });
 
-  return normalizedSong.mode === "advanced"
-    ? ensureTimingForSong(normalizedSong)
-    : normalizedSong;
+  // Arrangement sanitation: drop occurrences whose sourceSectionId no longer
+  // resolves (never keep silent danglers), and repair a broken
+  // activeArrangementId. Also normalize any arrangement object IDs.
+  const sectionIds = new Set(normalizedSong.source.sections.map((section) => section.id));
+  const validArrangements: Arrangement[] = (Array.isArray(normalizedSong.arrangements)
+    ? normalizedSong.arrangements
+    : [])
+    .filter(Boolean)
+    .map((arrangement) => ({
+      ...arrangement,
+      id: arrangement.id || createId("arr"),
+      name: arrangement.name || "Default",
+      occurrences: (Array.isArray(arrangement.occurrences) ? arrangement.occurrences : [])
+        .filter((occ) => occ && sectionIds.has(occ.sourceSectionId))
+        .map((occ) => ({
+          ...occ,
+          id: occ.id || createId("occ"),
+          note: occ.note?.trim() ? occ.note.trim() : undefined,
+        })),
+    }));
+
+  const arrangements = validArrangements.length
+    ? validArrangements
+    : [
+        {
+          id: createId("arr"),
+          name: "Default",
+          occurrences: normalizedSong.source.sections.map((section) => ({
+            id: createId("occ"),
+            sourceSectionId: section.id,
+          })),
+        },
+      ];
+
+  const activeArrangementId = arrangements.some(
+    (arrangement) => arrangement.id === normalizedSong.activeArrangementId,
+  )
+    ? normalizedSong.activeArrangementId
+    : arrangements[0].id;
+
+  const withArrangements: Song = {
+    ...normalizedSong,
+    arrangements,
+    activeArrangementId,
+  };
+
+  return withArrangements.mode === "advanced"
+    ? ensureTimingForSong(withArrangements)
+    : withArrangements;
 }
 
 export function loadSongs(): Song[] {
@@ -344,46 +423,148 @@ export function duplicateSong(song: Song): Song {
   const now = new Date().toISOString();
   const normalizedSong = normalizeSong(song);
 
+  const sectionIdMap = new Map<string, string>();
+  const lineIdMap = new Map<string, string>();
+  const wordIdMap = new Map<string, string>();
+  const syllableIdMap = new Map<string, string>();
+  const annotationIdMap = new Map<string, string>();
+  const barIdMap = new Map<string, string>();
+  const timingEventIdMap = new Map<string, string>();
+  const arrangementIdMap = new Map<string, string>();
+  const occurrenceIdMap = new Map<string, string>();
+
+  const sourceSections = normalizedSong.source.sections.map((section) => {
+    const nextSectionId = createId("section");
+    sectionIdMap.set(section.id, nextSectionId);
+
+    return {
+      ...section,
+      id: nextSectionId,
+      lines: section.lines.map((line) => {
+        const nextLineId = createId("line");
+        lineIdMap.set(line.id, nextLineId);
+
+        return {
+          ...line,
+          id: nextLineId,
+          words: line.words.map((word) => {
+            const nextWordId = createId("word");
+            wordIdMap.set(word.id, nextWordId);
+
+            return {
+              ...word,
+              id: nextWordId,
+              syllables: word.syllables.map((syllable) => {
+                const nextSyllableId = createId("syllable");
+                syllableIdMap.set(syllable.id, nextSyllableId);
+
+                return {
+                  ...syllable,
+                  id: nextSyllableId,
+                  techniques: syllable.techniques.map((technique) => ({ ...technique })),
+                };
+              }),
+            };
+          }),
+          annotations: line.annotations.map((annotation) => {
+            const nextAnnotationId = createId("annotation");
+            annotationIdMap.set(annotation.id, nextAnnotationId);
+
+            return {
+              ...annotation,
+              id: nextAnnotationId,
+              syllableIds: annotation.syllableIds
+                .map((id) => syllableIdMap.get(id))
+                .filter((id): id is string => Boolean(id)),
+              appliesTo: [...annotation.appliesTo],
+            };
+          }),
+        };
+      }),
+    };
+  });
+
+  const timingByLine = Object.fromEntries(
+    Object.entries(normalizedSong.timingByLine).flatMap(([oldLineId, lineTiming]) => {
+      const lineId = lineIdMap.get(oldLineId);
+      if (!lineId) {
+        return [];
+      }
+
+      const remapEvent = (event: (typeof lineTiming.sharedEvents)[number]) => {
+        const nextEventId = createId("timingEvent");
+        timingEventIdMap.set(event.id, nextEventId);
+        return {
+          ...event,
+          id: nextEventId,
+          sectionId: sectionIdMap.get(event.sectionId) ?? event.sectionId,
+          lineId,
+          barId: barIdMap.get(event.barId) ?? event.barId,
+          syllableId: event.syllableId
+            ? syllableIdMap.get(event.syllableId) ?? event.syllableId
+            : undefined,
+        };
+      };
+
+      const bars = lineTiming.bars.map((bar) => {
+        const nextBarId = createId("bar");
+        barIdMap.set(bar.id, nextBarId);
+        return {
+          ...bar,
+          id: nextBarId,
+          sectionId: sectionIdMap.get(bar.sectionId) ?? bar.sectionId,
+          lineId,
+        };
+      });
+
+      const remappedTiming = {
+        ...lineTiming,
+        lineId,
+        bars,
+        sharedEvents: lineTiming.sharedEvents.map(remapEvent),
+        partOverrides: Object.fromEntries(
+          Object.entries(lineTiming.partOverrides).map(([part, events]) => [
+            part,
+            events?.map(remapEvent),
+          ]),
+        ),
+      };
+
+      return [[lineId, remappedTiming]] as const;
+    }),
+  );
+
+  const arrangements = normalizedSong.arrangements.map((arrangement) => {
+    const nextArrangementId = createId("arr");
+    arrangementIdMap.set(arrangement.id, nextArrangementId);
+    return {
+      ...arrangement,
+      id: nextArrangementId,
+      occurrences: arrangement.occurrences.map((occurrence) => {
+        const nextOccurrenceId = createId("occ");
+        occurrenceIdMap.set(occurrence.id, nextOccurrenceId);
+        return {
+          ...occurrence,
+          id: nextOccurrenceId,
+          sourceSectionId:
+            sectionIdMap.get(occurrence.sourceSectionId) ?? occurrence.sourceSectionId,
+        };
+      }),
+    };
+  });
+
+  const activeArrangementId =
+    arrangementIdMap.get(normalizedSong.activeArrangementId) ?? arrangements[0]?.id ?? createId("arr");
+
   return {
     ...normalizedSong,
     id: createId("song"),
     title: `${normalizedSong.title || "Untitled Song"} Copy`,
     createdAt: now,
     updatedAt: now,
-    sections: normalizedSong.sections.map((section) => ({
-      ...section,
-      id: createId("section"),
-      lines: section.lines.map((line) => {
-        const syllableIdMap = new Map<string, string>();
-        const words = line.words.map((word) => ({
-          ...word,
-          id: createId("word"),
-          syllables: word.syllables.map((syllable) => {
-            const nextId = createId("syllable");
-            syllableIdMap.set(syllable.id, nextId);
-
-            return {
-              ...syllable,
-              id: nextId,
-              techniques: syllable.techniques.map((technique) => ({ ...technique })),
-            };
-          }),
-        }));
-
-        return {
-          ...line,
-          id: createId("line"),
-          words,
-          annotations: line.annotations.map((annotation) => ({
-            ...annotation,
-            id: createId("annotation"),
-            syllableIds: annotation.syllableIds
-              .map((id) => syllableIdMap.get(id))
-              .filter(Boolean) as string[],
-            appliesTo: [...annotation.appliesTo],
-          })),
-        };
-      }),
-    })),
+    source: { sections: sourceSections },
+    arrangements,
+    activeArrangementId,
+    timingByLine,
   };
 }

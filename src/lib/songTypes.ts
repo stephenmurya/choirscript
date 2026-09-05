@@ -109,6 +109,55 @@ export type SongSection = {
   lines: SongLine[];
 };
 
+/**
+ * Canonical section classification. Freeform `name` remains the primary
+ * label; `type` is optional UI affordance data (grouping/creation), never
+ * load-bearing for identity or rendering.
+ */
+export type SourceSectionType =
+  | "verse"
+  | "chorus"
+  | "bridge"
+  | "intro"
+  | "outro"
+  | "preChorus"
+  | "instrumental"
+  | "custom";
+
+export type SourceSection = SongSection & {
+  type?: SourceSectionType;
+};
+
+// ── Arrangement model (Phase 3 architecture, see
+// docs/phase-3-source-arrangement-architecture.md) ────────────────
+//
+// Occurrences reference canonical Source sections. Musical content
+// (lyrics, SATB, techniques, annotations, timing) stays in Source —
+// occurrences carry sequence + placement identity only.
+//
+// RESERVED SEAM: future narrow occurrence-level PERFORMANCE overrides
+// (timing deltas, holds, dynamics, arrangement-specific director cues)
+// may be added here in a later phase. Canonical Source remains the
+// default authority even then; lyrics/SATB stay canonical. Deliberately
+// no override fields exist in this phase — adding them later must not
+// require duplicating full Source sections.
+
+export type ArrangementOccurrence = {
+  /** Unique placement identity (createId("occ")); stable across reorders. */
+  id: string;
+  /** Required reference into Song.source.sections. */
+  sourceSectionId: string;
+  /** Occurrence-local performance note; never mutates Source. */
+  note?: string;
+};
+
+export type Arrangement = {
+  id: string;
+  name: string;
+  /** Array order = performance order. */
+  occurrences: ArrangementOccurrence[];
+};
+
 export type Song = {
   id: string;
   title: string;
@@ -117,15 +166,20 @@ export type Song = {
   tempo?: string;
   notes?: string;
   mode: SongMode;
-  sections: SongSection[];
+  /** Canonical Source material. */
+  source: { sections: SourceSection[] };
+  arrangements: Arrangement[];
+  activeArrangementId: string;
   timingSettings: SongTimingSettings;
   timingByLine: Record<string, LineTiming>;
   createdAt: string;
   updatedAt: string;
+  /** Song aggregate schema version (see migration in songStorage.ts). */
+  schemaVersion: 2;
 };
 
 export type SharedSongPayload = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   shareId: string;
   createdAt: string;
   updatedAt: string;

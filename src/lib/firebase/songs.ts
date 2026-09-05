@@ -9,9 +9,8 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { createId } from "@/lib/songStorage";
+import { duplicateSong as duplicateLocalSong, normalizeSong } from "@/lib/songStorage";
 import type { Song } from "@/lib/songTypes";
-import { normalizeSong } from "@/lib/songStorage";
 import { buildSongCardSummary } from "@/lib/songSummary";
 import { getFirebaseFirestore } from "./client";
 import {
@@ -55,7 +54,7 @@ function describeFirestoreError(error: unknown): Error {
   return error instanceof Error ? error : new Error("Cloud storage request failed.");
 }
 
-const CARD_SUMMARY_VERSION = 1;
+export const CARD_SUMMARY_VERSION = 2;
 
 function parseCardSummary(value: unknown): SongCardSummary | undefined {
   if (!value || typeof value !== "object") {
@@ -222,25 +221,26 @@ export async function createSong(
 ): Promise<SongMeta> {
   try {
     const db = await getFirebaseFirestore();
+    const normalizedSong = normalizeSong(song);
 
     if (options.checkCollision !== false) {
-      const existing = await getDoc(songDocRef(db, workspaceId, song.id));
+      const existing = await getDoc(songDocRef(db, workspaceId, normalizedSong.id));
       if (existing.exists()) {
-        throw new Error(`A song with id "${song.id}" already exists in this workspace.`);
+        throw new Error(`A song with id "${normalizedSong.id}" already exists in this workspace.`);
       }
     }
 
-    const meta = toSongMeta(song, uid, options.contributor);
+    const meta = toSongMeta(normalizedSong, uid, options.contributor);
     const document: SongDocument = {
-      schemaVersion: 1,
-      song,
-      updatedAt: song.updatedAt,
+      schemaVersion: 2,
+      song: normalizedSong,
+      updatedAt: normalizedSong.updatedAt,
       updatedBy: uid,
     };
 
     const batch = writeBatch(db);
-    batch.set(songDocRef(db, workspaceId, song.id), { ...meta, createdAt: song.createdAt });
-    batch.set(documentRef(db, workspaceId, song.id), document);
+    batch.set(songDocRef(db, workspaceId, normalizedSong.id), { ...meta, createdAt: normalizedSong.createdAt });
+    batch.set(documentRef(db, workspaceId, normalizedSong.id), document);
 
     await batch.commit();
     return meta;
@@ -259,11 +259,12 @@ export async function saveSong(
 ): Promise<SongMeta> {
   try {
     const db = await getFirebaseFirestore();
-    const meta = metaFromSong(song, existingMeta ?? null, uid, contributor);
+    const normalizedSong = normalizeSong(song);
+    const meta = metaFromSong(normalizedSong, existingMeta ?? null, uid, contributor);
     const document: SongDocument = {
-      schemaVersion: 1,
-      song,
-      updatedAt: song.updatedAt,
+      schemaVersion: 2,
+      song: normalizedSong,
+      updatedAt: normalizedSong.updatedAt,
       updatedBy: uid,
     };
 
@@ -290,17 +291,7 @@ export async function duplicateSong(
       throw new Error("Song not found.");
     }
 
-    const { song } = result;
-    const now = new Date().toISOString();
-    const copy: Song = {
-      ...song,
-      id: createId("song"),
-      title: `${song.title || "Untitled Song"} Copy`,
-      createdAt: now,
-      updatedAt: now,
-      // timingByLine references lineIds which are unchanged, so copying the
-      // map verbatim keeps advanced-mode timing intact.
-    };
+    const copy = duplicateLocalSong(result.song);
 
     return await createSong(workspaceId, copy, uid, { checkCollision: false });
   } catch (error) {

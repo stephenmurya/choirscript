@@ -72,7 +72,7 @@ export function getLineSyllableText(line: SongLine, syllableIds: Iterable<string
 }
 
 export function getSongSyllableIds(song: Song) {
-  return song.sections.flatMap((section) =>
+  return song.source.sections.flatMap((section) =>
     section.lines.flatMap((line) => flattenLineSyllables(line).map((syllable) => syllable.id)),
   );
 }
@@ -297,7 +297,7 @@ export function findAnnotation(
     return null;
   }
 
-  for (const section of song.sections) {
+  for (const section of song.source.sections) {
     for (const line of section.lines) {
       const annotation = line.annotations.find((item) => item.id === annotationId);
 
@@ -317,37 +317,39 @@ export function applyTechniqueToSyllables(
 ): Song {
   return {
     ...song,
-    sections: song.sections.map((section) => ({
-      ...section,
-      lines: section.lines.map((line) => {
-        if (line.id !== selection.lineId) {
-          return line;
-        }
+    source: {
+      sections: song.source.sections.map((section) => ({
+        ...section,
+        lines: section.lines.map((line) => {
+          if (line.id !== selection.lineId) {
+            return line;
+          }
 
-        const selectedSet = new Set(selection.selectedSyllableIds);
-        const lineSyllableIds = flattenLineSyllables(line)
-          .map((syllable) => syllable.id)
-          .filter((id) => selectedSet.has(id));
+          const selectedSet = new Set(selection.selectedSyllableIds);
+          const lineSyllableIds = flattenLineSyllables(line)
+            .map((syllable) => syllable.id)
+            .filter((id) => selectedSet.has(id));
 
-        if (lineSyllableIds.length === 0) {
-          return line;
-        }
+          if (lineSyllableIds.length === 0) {
+            return line;
+          }
 
-        return {
-          ...line,
-          annotations: [
-            ...line.annotations,
-            {
-              id: createId("annotation"),
-              techniqueId,
-              syllableIds: lineSyllableIds,
-              appliesTo: ["all"],
-              createdAt: new Date().toISOString(),
-            },
-          ],
-        };
-      }),
-    })),
+          return {
+            ...line,
+            annotations: [
+              ...line.annotations,
+              {
+                id: createId("annotation"),
+                techniqueId,
+                syllableIds: lineSyllableIds,
+                appliesTo: ["all"],
+                createdAt: new Date().toISOString(),
+              },
+            ],
+          };
+        }),
+      })),
+    },
   };
 }
 
@@ -369,40 +371,42 @@ export function removeTechniqueFromSyllableIds(
 
   return {
     ...song,
-    sections: song.sections.map((section) => ({
-      ...section,
-      lines: section.lines.map((line) => {
-        if (line.id !== lineId) {
-          return line;
-        }
+    source: {
+      sections: song.source.sections.map((section) => ({
+        ...section,
+        lines: section.lines.map((line) => {
+          if (line.id !== lineId) {
+            return line;
+          }
 
-        return {
-          ...line,
-          words: line.words.map((word) => ({
-            ...word,
-            syllables: word.syllables.map((syllable) =>
-              selectedSet.has(syllable.id)
-                ? {
-                    ...syllable,
-                    techniques: syllable.techniques.filter(
-                      (technique) => technique.techniqueId !== techniqueId,
-                    ),
-                  }
-                : syllable,
-            ),
-          })),
-          annotations: line.annotations
-            .map((annotation) =>
-              annotation.techniqueId === techniqueId
-                ? {
-                    ...annotation,
-                    syllableIds: annotation.syllableIds.filter((id) => !selectedSet.has(id)),
-                  }
-                : annotation,
-            )
-            .filter((annotation) => annotation.syllableIds.length > 0),
-        };
-      }),
-    })),
+          return {
+            ...line,
+            words: line.words.map((word) => ({
+              ...word,
+              syllables: word.syllables.map((syllable) =>
+                selectedSet.has(syllable.id)
+                  ? {
+                      ...syllable,
+                      techniques: syllable.techniques.filter(
+                        (technique) => technique.techniqueId !== techniqueId,
+                      ),
+                    }
+                  : syllable,
+              ),
+            })),
+            annotations: line.annotations
+              .map((annotation) =>
+                annotation.techniqueId === techniqueId
+                  ? {
+                      ...annotation,
+                      syllableIds: annotation.syllableIds.filter((id) => !selectedSet.has(id)),
+                    }
+                  : annotation,
+              )
+              .filter((annotation) => annotation.syllableIds.length > 0),
+          };
+        }),
+      })),
+    },
   };
 }

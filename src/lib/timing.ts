@@ -664,13 +664,13 @@ export function resetPartOverride(lineTiming: LineTiming, part: VocalPart) {
 export function ensureTimingForSong(song: Song, settings = song.timingSettings) {
   const normalizedSettings = normalizeSettings(settings);
   const validLineIds = new Set(
-    song.sections.flatMap((section) => section.lines.map((line) => line.id)),
+    song.source.sections.flatMap((section) => section.lines.map((line) => line.id)),
   );
   const timingByLine = Object.fromEntries(
     Object.entries(song.timingByLine ?? {}).filter(([lineId]) => validLineIds.has(lineId)),
   );
 
-  song.sections.forEach((section) => {
+  song.source.sections.forEach((section) => {
     section.lines.forEach((line) => {
       if (!timingByLine[line.id]) {
         timingByLine[line.id] = createDefaultTimingForLine(line, normalizedSettings, section.id);

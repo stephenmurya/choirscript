@@ -4,6 +4,7 @@ import { cache } from "react";
 import { get, put } from "@vercel/blob";
 import { nanoid } from "nanoid";
 import type { SharedSongPayload, Song } from "./songTypes";
+import { normalizeSong } from "./songStorage";
 
 const SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{10,32}$/;
 
@@ -48,7 +49,7 @@ export async function createSharedSong(song: Song): Promise<{ shareId: string; u
   const shareId = nanoid(10);
   const now = new Date().toISOString();
   const payload: SharedSongPayload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     shareId,
     createdAt: now,
     updatedAt: now,
@@ -57,7 +58,7 @@ export async function createSharedSong(song: Song): Promise<{ shareId: string; u
     key: song.key,
     bpm: song.tempo,
     song: {
-      ...song,
+      ...normalizeSong(song),
       updatedAt: song.updatedAt || now,
       createdAt: song.createdAt || now,
     },
@@ -100,11 +101,15 @@ export const getSharedSong = cache(async (shareId: string): Promise<SharedSongPa
     const text = await streamToText(result.stream);
     const parsed = JSON.parse(text) as SharedSongPayload;
 
-    if (parsed.schemaVersion !== 1 || parsed.shareId !== shareId || !parsed.song) {
+    if (![1, 2].includes(parsed.schemaVersion) || parsed.shareId !== shareId || !parsed.song) {
       return null;
     }
 
-    return parsed;
+    return {
+      ...parsed,
+      schemaVersion: 2,
+      song: normalizeSong(parsed.song),
+    };
   } catch {
     return null;
   }

@@ -14,7 +14,7 @@ export function getSelectionContexts(
   const selectedSet = new Set(selectedIds);
   const contexts: SyllableSelectionContext[] = [];
 
-  song.sections.forEach((section) => {
+  song.source.sections.forEach((section) => {
     section.lines.forEach((line) => {
       line.words.forEach((word) => {
         word.syllables.forEach((syllable) => {
@@ -38,7 +38,7 @@ export function getWordSyllableIds(word: WordToken) {
 }
 
 export function songHasBass(song: Song) {
-  return song.sections.some((section) =>
+  return song.source.sections.some((section) =>
     section.lines.some((line) =>
       line.words.some((word) =>
         word.syllables.some((syllable) => Boolean(syllable.bass?.trim())),

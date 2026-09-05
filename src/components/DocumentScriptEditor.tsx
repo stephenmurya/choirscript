@@ -44,6 +44,7 @@ type DocumentScriptEditorProps = {
   onSectionFocusHandled: () => void;
   onMetadataChange: (patch: Partial<Song>) => void;
   onRenameSection: (sectionId: string, name: string) => void;
+  onDeleteSection: (sectionId: string) => void;
   onCreateSectionAfter: (sectionId: string | null) => void;
   onAddLine: (sectionId: string, lyricLine: string) => void;
   onGenerateScript: (lyrics: string) => void;
@@ -90,6 +91,7 @@ export function DocumentScriptEditor({
   onSectionFocusHandled,
   onMetadataChange,
   onRenameSection,
+  onDeleteSection,
   onCreateSectionAfter,
   onAddLine,
   onGenerateScript,
@@ -120,8 +122,8 @@ export function DocumentScriptEditor({
   // type immediately. Only runs for genuinely empty songs, only once per
   // mount — never hijacks focus for populated songs.
   const isEmptySong =
-    song.sections.length === 0 ||
-    song.sections.every((section) => section.lines.length === 0);
+    song.source.sections.length === 0 ||
+    song.source.sections.every((section) => section.lines.length === 0);
 
   useEffect(() => {
     if (!isEmptySong || emptyStateFocusedRef.current) {
@@ -296,7 +298,7 @@ export function DocumentScriptEditor({
             </Label>
             <div className="mt-4">
               <LyricsImporter
-                activeSectionName={song.sections[0]?.name ?? "the first section"}
+                activeSectionName={song.source.sections[0]?.name ?? "the first section"}
                 onGenerate={(lyrics) => {
                   onGenerateScript(lyrics);
                   setIsImportOpen(false);
@@ -326,34 +328,44 @@ export function DocumentScriptEditor({
         ) : null}
 
         <div className="flex flex-col gap-8">
-          {song.sections.map((section) => (
+          {song.source.sections.map((section) => (
             <section
               key={section.id}
+              id={`source-${section.id}`}
               className="min-w-0 border-b border-border/70 pb-8 last:border-b-0"
             >
-              <input
-                ref={(node) => {
-                  if (node) {
-                    sectionTitleRefs.current.set(section.id, node);
-                  } else {
-                    sectionTitleRefs.current.delete(section.id);
-                  }
-                }}
-                aria-label={`Section title ${section.name}`}
-                value={section.name}
-                onChange={(event) => onRenameSection(section.id, event.target.value)}
-                onBlur={(event) => {
-                  if (!event.target.value.trim()) {
-                    onRenameSection(section.id, "New Section");
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  }
-                }}
-                className="document-section-title mb-3 w-full bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus:text-foreground"
-              />
+              <div className="mb-3 flex items-center gap-2">
+                <input
+                  ref={(node) => {
+                    if (node) {
+                      sectionTitleRefs.current.set(section.id, node);
+                    } else {
+                      sectionTitleRefs.current.delete(section.id);
+                    }
+                  }}
+                  aria-label={`Section title ${section.name}`}
+                  value={section.name}
+                  onChange={(event) => onRenameSection(section.id, event.target.value)}
+                  onBlur={(event) => {
+                    if (!event.target.value.trim()) {
+                      onRenameSection(section.id, "New Section");
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  className="document-section-title min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus:text-foreground"
+                />
+                <button
+                  type="button"
+                  onClick={() => onDeleteSection(section.id)}
+                  className="no-print shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/10"
+                >
+                  Delete Source
+                </button>
+              </div>
               {section.lines.map((line, lineIndex) => {
                 if (song.mode === "advanced") {
                   const lineTiming = song.timingByLine[line.id];
@@ -407,7 +419,7 @@ export function DocumentScriptEditor({
             </section>
           ))}
 
-          {song.sections.length === 0 ? (
+          {song.source.sections.length === 0 ? (
             <div data-empty-song-focus="true" data-empty-song-surface="true">
               <SlashCommandLine onCreateSection={() => onCreateSectionAfter(null)} />
               <p className="mt-2 px-1 text-xs text-muted-foreground">

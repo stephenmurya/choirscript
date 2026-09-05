@@ -8,6 +8,7 @@ import {
   PART_LABELS,
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
+import { resolveArrangement } from "@/lib/arrangement";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { TechniqueLegend } from "./TechniqueLegend";
@@ -43,10 +44,12 @@ function ReadOnlyVoiceLanes({
   line,
   toggles,
   gridStartRow,
+  renderIdentity,
 }: {
   line: SongLine;
   toggles: RehearsalDisplayToggles;
   gridStartRow: number;
+  renderIdentity: string;
 }) {
   const syllables = flattenLineSyllables(line);
   const rows = PART_LABELS.filter((part) => {
@@ -84,7 +87,7 @@ function ReadOnlyVoiceLanes({
           </div>
           {syllables.map((flat) => (
             <span
-              key={`${row.key}-${flat.id}`}
+              key={`${renderIdentity}:${row.key}:${flat.id}`}
               className="grid justify-items-center"
               style={{ gridColumn: flat.absoluteIndex + 2, gridRow }}
             >
@@ -101,7 +104,7 @@ function ReadOnlyVoiceLanes({
   );
 }
 
-function DirectorNotes({ line }: { line: SongLine }) {
+function DirectorNotes({ line, renderIdentity }: { line: SongLine; renderIdentity: string }) {
   const notes = line.words.flatMap((word) =>
     word.syllables
       .filter((syllable) => syllable.directorNote?.trim())
@@ -119,7 +122,7 @@ function DirectorNotes({ line }: { line: SongLine }) {
   return (
     <div className="mt-4 flex flex-col gap-1 rounded-md bg-muted/30 p-3 text-sm leading-6 text-muted-foreground">
       {notes.map((item) => (
-        <p key={item.id}>
+        <p key={`${renderIdentity}:${item.id}`}>
           <span className="font-semibold text-foreground">{item.label}:</span> {item.note}
         </p>
       ))}
@@ -130,9 +133,11 @@ function DirectorNotes({ line }: { line: SongLine }) {
 function RehearsalLine({
   line,
   toggles,
+  renderIdentity,
 }: {
   line: SongLine;
   toggles: RehearsalDisplayToggles;
+  renderIdentity: string;
 }) {
   const flatSyllables = flattenLineSyllables(line);
   const placedTechniqueRanges = toggles.techniques
@@ -167,7 +172,7 @@ function RehearsalLine({
 
             return (
               <span
-                key={range.id}
+                key={`${renderIdentity}:${range.id}`}
                 className="-mb-px flex w-fit max-w-full justify-self-start"
                 style={{
                   gridColumn: `${range.startIndex + 2} / span ${
@@ -200,7 +205,7 @@ function RehearsalLine({
 
             return (
               <span
-                key={flat.id}
+                key={`${renderIdentity}:${flat.id}`}
                 style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
                 className={`min-h-8 w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-2 text-center text-[0.96rem] font-medium leading-none text-foreground ${
                   technique
@@ -213,10 +218,17 @@ function RehearsalLine({
               </span>
             );
           })}
-          <ReadOnlyVoiceLanes line={line} toggles={toggles} gridStartRow={voiceStartRow} />
+          <ReadOnlyVoiceLanes
+            line={line}
+            toggles={toggles}
+            gridStartRow={voiceStartRow}
+            renderIdentity={renderIdentity}
+          />
         </div>
       </div>
-      {toggles.directorNotes ? <DirectorNotes line={line} /> : null}
+      {toggles.directorNotes ? (
+        <DirectorNotes line={line} renderIdentity={renderIdentity} />
+      ) : null}
     </div>
   );
 }
@@ -257,18 +269,22 @@ export function ColorfulRehearsalView({
       ) : null}
 
       <div className="space-y-8">
-        {song.sections.map((section) => (
-          <section key={section.id} className="rehearsal-section border-b border-border pb-8 last:border-b-0">
-            <h2 className="mb-3 text-xl font-semibold text-foreground">
-              {section.name}
-            </h2>
+        {resolveArrangement(song).map(({ occurrenceId, section }) => (
+          <section
+            key={occurrenceId}
+            className="rehearsal-section border-b border-border pb-8 last:border-b-0"
+          >
+            <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
             {section.lines.length === 0 ? (
-              <p className="text-muted-foreground">
-                No lyric lines in this section.
-              </p>
+              <p className="text-muted-foreground">No lyric lines in this section.</p>
             ) : null}
             {section.lines.map((line) => (
-              <RehearsalLine key={line.id} line={line} toggles={toggles} />
+              <RehearsalLine
+                key={`${occurrenceId}:${line.id}`}
+                line={line}
+                toggles={toggles}
+                renderIdentity={`${occurrenceId}:${line.id}`}
+              />
             ))}
           </section>
         ))}
