@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -7,7 +8,6 @@ import {
   CloudOff,
   Copy,
   Eye,
-  Library,
   Loader2,
   MoreVertical,
   Plus,
@@ -46,10 +46,135 @@ function formatUpdated(value: string) {
 
 type SongActionId = "open" | "rehearsal" | "share" | "duplicate" | "delete";
 
+const SONG_ACTION_ITEMS: Array<{
+  id: SongActionId;
+  label: string;
+  icon: typeof Copy;
+  destructive?: boolean;
+  separatorBefore?: boolean;
+}> = [
+  { id: "open", label: "Open", icon: Copy },
+  { id: "rehearsal", label: "Rehearsal / Preview", icon: Eye },
+  { id: "share", label: "Share", icon: Share2 },
+  { id: "duplicate", label: "Duplicate", icon: Copy, separatorBefore: true },
+  { id: "delete", label: "Delete", icon: Trash, destructive: true, separatorBefore: true },
+];
+
+type SongActionHandlers = {
+  open: (song: SongMeta) => void;
+  rehearsal: (song: SongMeta) => void;
+  share: (song: SongMeta) => void;
+  duplicate: (song: SongMeta) => void;
+  delete: (song: SongMeta) => void;
+};
+
 /**
- * Workspace (`/`): the canonical song-library surface. Top navbar (in the
- * layout) carries identity and New Song; this page handles search, the song
- * list, and per-song actions via a SHARED menu (More button + right-click).
+ * One song card in the workspace grid.
+ *
+ * Interaction model (deliberate boundaries — no invisible overlays):
+ * - The card wrapper is a plain div; it carries the right-click
+ *   (ContextMenuTrigger) surface only. It has NO click handler.
+ * - The title/metadata area is a real <Link> → opens the song.
+ * - The More (⋯) button is a Base UI MenuTrigger <button>, a SIBLING of the
+ *   link (never nested inside it) → opens the action menu only.
+ * - Right-click does not trigger navigation (contextmenu !== click on Link).
+ * - Empty workspace space belongs to no card and no handler.
+ */
+function SongCard({
+  song,
+  isPending,
+  actions,
+}: {
+  song: SongMeta;
+  isPending: boolean;
+  actions: SongActionHandlers;
+}) {
+  const metadata = [song.artist, song.key, song.tempo].filter(Boolean).join(" / ");
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger
+        render={
+          <div className="group relative flex items-start gap-2 rounded-2xl border border-border bg-card/70 p-4 transition hover:border-sidebar-accent hover:bg-sidebar-accent/40" />
+        }
+      >
+        {/* Main content — the only element that navigates */}
+        <Link
+          href={`/songs/${song.id}`}
+          className="min-w-0 flex-1 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="block truncate text-sm font-semibold text-foreground">
+            {song.title || "Untitled Song"}
+          </span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">
+            {metadata || "No details"}
+          </span>
+          <span className="mt-3 block text-xs text-muted-foreground">
+            Updated {formatUpdated(song.updatedAt)}
+          </span>
+        </Link>
+
+        {/* More (⋯) — separate interactive element, sibling of the Link */}
+        {isPending ? (
+          <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <MoreVertical />
+                  <span className="sr-only">Actions for {song.title || "Untitled Song"}</span>
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              {SONG_ACTION_ITEMS.map((action) => (
+                <div key={action.id} className="contents">
+                  {action.separatorBefore ? <DropdownMenuSeparator /> : null}
+                  <DropdownMenuItem
+                    variant={action.destructive ? "destructive" : "default"}
+                    onClick={() => actions[action.id](song)}
+                  >
+                    <action.icon data-icon="inline-start" />
+                    {action.label}
+                  </DropdownMenuItem>
+                </div>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </ContextMenuTrigger>
+
+      {/* Right-click menu — same shared action list, same handlers */}
+      <ContextMenuContent>
+        {SONG_ACTION_ITEMS.map((action) => (
+          <div key={action.id} className="contents">
+            {action.separatorBefore ? <ContextMenuSeparator /> : null}
+            <ContextMenuItem
+              variant={action.destructive ? "destructive" : "default"}
+              onClick={() => actions[action.id](song)}
+            >
+              <action.icon data-icon="inline-start" />
+              {action.label}
+            </ContextMenuItem>
+          </div>
+        ))}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/**
+ * Workspace (`/`): the canonical song library. Top navbar (in the layout)
+ * carries identity and the single New Song action; this page owns search,
+ * the card grid, and per-song actions via shared definitions used by BOTH
+ * the More menu and the right-click context menu.
  */
 export function WorkspaceHomePage() {
   const router = useRouter();
@@ -91,90 +216,34 @@ export function WorkspaceHomePage() {
     }
   }
 
-  function handleDuplicate(songMeta: SongMeta) {
-    withPending(songMeta.id, async () => {
-      const copyMeta = await duplicateSong(songMeta.id);
-      if (copyMeta) {
-        router.push(`/songs/${copyMeta.id}`);
+  const actions: SongActionHandlers = {
+    open: (song) => router.push(`/songs/${song.id}`),
+    rehearsal: (song) => router.push(`/songs/${song.id}/rehearsal`),
+    share: (song) => {
+      // Share needs the full Song document for the snapshot payload; the
+      // editor owns that flow, so route there. Metadata-only cost discipline
+      // for the workspace is preserved (no document/current reads here).
+      router.push(`/songs/${song.id}`);
+      toast.info("Open the song, then use Share to create a view-only link.");
+    },
+    duplicate: (song) => {
+      withPending(song.id, async () => {
+        const copyMeta = await duplicateSong(song.id);
+        if (copyMeta) {
+          // Established create/duplicate flow: land in the copy.
+          router.push(`/songs/${copyMeta.id}`);
+        }
+      });
+    },
+    delete: (song) => {
+      if (!window.confirm(`Delete "${song.title || "Untitled Song"}"?`)) {
+        return;
       }
-    });
-  }
 
-  function handleDelete(songMeta: SongMeta) {
-    if (!window.confirm(`Delete "${songMeta.title || "Untitled Song"}"?`)) {
-      return;
-    }
-
-    withPending(songMeta.id, () => deleteSong(songMeta.id));
-  }
-
-  function handleShare(songMeta: SongMeta) {
-    // Share needs the full Song document (snapshot payload); the editor owns
-    // that flow, so route there. Metadata-only cost discipline is preserved.
-    router.push(`/songs/${songMeta.id}`);
-    toast.info("Open the song, then use Share to create a view-only link.");
-  }
-
-  function runAction(action: SongActionId, song: SongMeta) {
-    switch (action) {
-      case "open":
-        router.push(`/songs/${song.id}`);
-        break;
-      case "rehearsal":
-        router.push(`/songs/${song.id}/rehearsal`);
-        break;
-      case "share":
-        handleShare(song);
-        break;
-      case "duplicate":
-        handleDuplicate(song);
-        break;
-      case "delete":
-        handleDelete(song);
-        break;
-    }
-  }
-
-  const actionHandlers = {
-    onOpen: (song: SongMeta) => runAction("open", song),
-    onRehearsal: (song: SongMeta) => runAction("rehearsal", song),
-    onShare: (song: SongMeta) => runAction("share", song),
-    onDuplicate: (song: SongMeta) => runAction("duplicate", song),
-    onDelete: (song: SongMeta) => runAction("delete", song),
+      // No navigation on delete: the grid updates optimistically.
+      withPending(song.id, () => deleteSong(song.id));
+    },
   };
-
-  function renderActionItems(
-    song: SongMeta,
-    Item: typeof ContextMenuItem,
-    Separator: typeof ContextMenuSeparator,
-  ) {
-    return (
-      <>
-        <Item onClick={() => actionHandlers.onOpen(song)}>
-          <Library data-icon="inline-start" />
-          Open
-        </Item>
-        <Item onClick={() => actionHandlers.onRehearsal(song)}>
-          <Eye data-icon="inline-start" />
-          Rehearsal / Preview
-        </Item>
-        <Item onClick={() => actionHandlers.onShare(song)}>
-          <Share2 data-icon="inline-start" />
-          Share
-        </Item>
-        <Separator />
-        <Item onClick={() => actionHandlers.onDuplicate(song)}>
-          <Copy data-icon="inline-start" />
-          Duplicate
-        </Item>
-        <Separator />
-        <Item className="text-destructive data-[variant=destructive]:text-destructive" onClick={() => actionHandlers.onDelete(song)}>
-          <Trash data-icon="inline-start" />
-          Delete
-        </Item>
-      </>
-    );
-  }
 
   return (
     <div className="mx-auto w-full max-w-[1100px] px-4 py-8 sm:px-6 lg:px-8">
@@ -241,84 +310,17 @@ export function WorkspaceHomePage() {
       ) : null}
 
       {!isLoading && !error && songs.length > 0 ? (
-        <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card/60">
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visibleSongs.map((song) => (
-            <ContextMenu key={song.id}>
-              <ContextMenuTrigger
-                render={
-                  <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3 transition last:border-b-0 hover:bg-sidebar-accent/30">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {song.title || "Untitled Song"}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[song.artist, song.key, song.tempo].filter(Boolean).join(" / ") ||
-                          "No details"}
-                        {" · "}
-                        Updated {formatUpdated(song.updatedAt)}
-                      </p>
-                    </div>
-                  </div>
-                }
-              />
-              {/* Row click opens the song */}
-              <button
-                type="button"
-                aria-label={`Open ${song.title || "Untitled Song"}`}
-                className="absolute inset-0 size-full cursor-pointer opacity-0"
-                onClick={() => runAction("open", song)}
-                tabIndex={-1}
-              />
-              {pendingId === song.id ? (
-                <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-              ) : (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        className="shrink-0"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <MoreVertical />
-                        <span className="sr-only">Song actions</span>
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end">
-                    {(
-                      [
-                        { id: "open" as SongActionId, label: "Open", icon: Library, separator: false },
-                        { id: "rehearsal" as SongActionId, label: "Rehearsal / Preview", icon: Eye, separator: false },
-                        { id: "share" as SongActionId, label: "Share", icon: Share2, separator: false },
-                        { id: "duplicate" as SongActionId, label: "Duplicate", icon: Copy, separator: true },
-                        { id: "delete" as SongActionId, label: "Delete", icon: Trash, separator: true },
-                      ]
-                    ).map((action) => (
-                      <div key={action.id} className="contents">
-                        {action.separator ? <DropdownMenuSeparator /> : null}
-                        <DropdownMenuItem
-                          variant={action.id === "delete" ? "destructive" : "default"}
-                          onClick={() => runAction(action.id, song)}
-                        >
-                          <action.icon data-icon="inline-start" />
-                          {action.label}
-                        </DropdownMenuItem>
-                      </div>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {/* Right-click menu — same actions */}
-              <ContextMenuContent>
-                {renderActionItems(song, ContextMenuItem, ContextMenuSeparator)}
-              </ContextMenuContent>
-            </ContextMenu>
+            <SongCard
+              key={song.id}
+              song={song}
+              isPending={pendingId === song.id}
+              actions={actions}
+            />
           ))}
           {visibleSongs.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+            <div className="col-span-full rounded-2xl border border-dashed border-border bg-card/50 px-6 py-10 text-center text-sm text-muted-foreground">
               No songs match that search.
             </div>
           ) : null}
