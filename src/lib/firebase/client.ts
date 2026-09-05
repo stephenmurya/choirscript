@@ -49,6 +49,17 @@ export async function getFirebaseAuth(): Promise<Auth> {
   return getAuth(app);
 }
 
+/**
+ * Start Firebase auth initialization ahead of a user gesture. Call this on
+ * mount of auth UI so that by the time the user clicks a sign-in button,
+ * getFirebaseAuth() resolves from cache in a single microtask and
+ * signInWithPopup() stays maximally coupled to the click's transient user
+ * activation (avoids production auth/popup-blocked on cold loads).
+ */
+export function warmUpFirebaseAuth(): Promise<Auth> {
+  return getFirebaseAuth();
+}
+
 export async function getFirebaseFirestore(): Promise<Firestore> {
   const app = await getFirebaseApp();
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   describeAuthError,
@@ -11,6 +11,7 @@ import {
   signInWithGoogle,
   signUpWithEmail,
 } from "@/lib/firebase/auth";
+import { warmUpFirebaseAuth } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,15 @@ export function LoginPage() {
     reset: false,
   });
   const resetSent = resetSentByMode[mode];
+
+  // Kick off Firebase auth initialization at mount so that the Google popup
+  // can be opened with minimal delay from the click gesture. Without this,
+  // a cold production load can insert enough async delay between the click
+  // and signInWithPopup() for the browser to consider the popup not
+  // user-initiated (auth/popup-blocked).
+  useEffect(() => {
+    warmUpFirebaseAuth().catch(() => undefined);
+  }, []);
 
   function updateField(field: keyof typeof initialState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));

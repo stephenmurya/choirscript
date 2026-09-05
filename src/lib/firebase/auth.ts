@@ -18,6 +18,14 @@ export type AuthResult = {
   workspaceId: string;
 };
 
+/** Raw Firebase error code for diagnostics (dev logging), unmapped. */
+export function describeAuthErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return String((error as { code: unknown }).code);
+  }
+  return error instanceof Error ? error.name : String(error);
+}
+
 /** Human-readable messages for Firebase auth error codes. */
 export function describeAuthError(error: unknown): string {
   const code =
@@ -237,8 +245,20 @@ export { describeFirestoreErrorCode };
 export async function signInWithGoogle(): Promise<User> {
   const auth = await getFirebaseAuth();
   const provider = new GoogleAuthProvider();
-  const credential = await signInWithPopup(auth, provider);
-  return credential.user;
+  provider.setCustomParameters({ prompt: "select_account" });
+
+  try {
+    const credential = await signInWithPopup(auth, provider);
+    return credential.user;
+  } catch (error) {
+    // Dev-only: surface the raw Firebase code so auth/popup-blocked,
+    // auth/unauthorized-domain, auth/popup-closed-by-user etc. are
+    // distinguishable instead of only the friendly user copy.
+    if (process.env.NODE_ENV === "development") {
+      console.error("[google-signin] failed with Firebase code:", describeAuthErrorCode(error), error);
+    }
+    throw error;
+  }
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<User> {
