@@ -35,6 +35,7 @@ import type {
   VocalPart,
 } from "@/lib/songTypes";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -42,10 +43,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AppShell } from "./AppShell";
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
+import { EditorShell } from "./EditorShell";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
-
 type SongEditorProps = {
   songId: string;
 };
@@ -467,14 +467,12 @@ export function SongEditor({ songId }: SongEditorProps) {
   // layout), so AppShell is wrapped in the songs provider inline below.
   const shell = (content: ReactNode) => (
     <WorkspaceSongsProvider>
-      <AppShell
-        activeSongId={song ? song.id : songId}
-        currentSong={song}
+      <EditorShell
+        song={song}
         saveStatus={saveStatus}
-        onSave={handleSaveNow}
       >
         {content}
-      </AppShell>
+      </EditorShell>
     </WorkspaceSongsProvider>
   );
 
@@ -523,7 +521,16 @@ export function SongEditor({ songId }: SongEditorProps) {
   }
 
   return shell(
-    <DocumentScriptEditor
+    <div>
+      <div className="mx-auto flex max-w-[1100px] items-center justify-end gap-2 px-3 pb-1 pt-4 sm:px-5 lg:px-8">
+        <Badge variant="secondary" className="gap-1">
+          {saveStatus}
+        </Badge>
+        <Button type="button" variant="outline" size="sm" onClick={handleSaveNow}>
+          Save now
+        </Button>
+      </div>
+      <DocumentScriptEditor
       song={song}
       includeBass={includeBass}
       selection={lyricSelection}
@@ -551,6 +558,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       onRemoveTechnique={handleRemoveTechnique}
       onUpdateWordSyllables={handleUpdateWordSyllables}
       onPartCueChange={handlePartCueChange}
-    />,
+      />
+    </div>,
   );
 }

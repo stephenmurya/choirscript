@@ -117,7 +117,7 @@ export function TimingSettingsPopover({ settings, onChange }: TimingSettingsPopo
           <Separator />
 
           <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
-            <Label>Units per bar</Label>
+            <Label className="flex-row items-center">Units per bar</Label>
             <Badge variant="outline">{getUnitsPerBar(settings)}</Badge>
           </div>
         </div>

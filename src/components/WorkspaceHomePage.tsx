@@ -1,14 +1,39 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ArrowRight, Clock as ClockIcon, CloudOff, Library, Loader2, Plus } from "lucide-react";
-import { useAuth } from "@/lib/firebase/AuthContext";
+import {
+  CloudOff,
+  Copy,
+  Eye,
+  Library,
+  Loader2,
+  MoreVertical,
+  Plus,
+  Search,
+  Share2,
+  Trash,
+} from "lucide-react";
+import type { SongMeta } from "@/lib/firebase/types";
 import { useWorkspaceSongs } from "./WorkspaceSongsContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { NewSongDialog } from "./NewSongDialog";
 import { OnboardingDialog } from "./OnboardingDialog";
 
@@ -19,73 +44,164 @@ function formatUpdated(value: string) {
   }).format(new Date(value));
 }
 
+type SongActionId = "open" | "rehearsal" | "share" | "duplicate" | "delete";
+
 /**
- * Workspace Home (`/`): identity, contextual greeting, primary creation
- * action, recent songs. Metadata only — no song bodies are read.
+ * Workspace (`/`): the canonical song-library surface. Top navbar (in the
+ * layout) carries identity and New Song; this page handles search, the song
+ * list, and per-song actions via a SHARED menu (More button + right-click).
  */
 export function WorkspaceHomePage() {
   const router = useRouter();
-  const { user, workspace } = useAuth();
-  const { recentSongs, songs, isLoading, error, reload, createSong } = useWorkspaceSongs();
+  const { songs, isLoading, error, reload, createSong, duplicateSong, deleteSong } =
+    useWorkspaceSongs();
+  const [searchQuery, setSearchQuery] = useState("");
   const [isNewSongOpen, setIsNewSongOpen] = useState(false);
   const [isTipsOpen, setIsTipsOpen] = useState(false);
-  const [isCreating, setIsCreating] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const firstName = user?.displayName?.split(" ")[0] ?? null;
-  const workspaceName = workspace?.name || "My Workspace";
+  const visibleSongs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
 
-  async function handleQuickCreate() {
-    setIsCreating(true);
+    if (!query) {
+      return songs;
+    }
+
+    return songs.filter((song) =>
+      [song.title, song.artist, song.key, song.tempo]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(query)),
+    );
+  }, [searchQuery, songs]);
+
+  async function withPending(songId: string, action: () => Promise<unknown>) {
+    setPendingId(songId);
 
     try {
-      const meta = await createSong({ title: "Untitled Song" });
-      if (meta) {
-        router.push(`/songs/${meta.id}`);
-      }
-    } catch (createError) {
-      console.error("Could not create song", createError);
+      await action();
+    } catch (actionError) {
+      console.error("Song action failed", actionError);
       toast.error(
-        createError instanceof Error
-          ? createError.message
-          : "Could not create the song. Please try again.",
+        actionError instanceof Error
+          ? actionError.message
+          : "Something went wrong. Please try again.",
       );
     } finally {
-      setIsCreating(false);
+      setPendingId(null);
     }
+  }
+
+  function handleDuplicate(songMeta: SongMeta) {
+    withPending(songMeta.id, async () => {
+      const copyMeta = await duplicateSong(songMeta.id);
+      if (copyMeta) {
+        router.push(`/songs/${copyMeta.id}`);
+      }
+    });
+  }
+
+  function handleDelete(songMeta: SongMeta) {
+    if (!window.confirm(`Delete "${songMeta.title || "Untitled Song"}"?`)) {
+      return;
+    }
+
+    withPending(songMeta.id, () => deleteSong(songMeta.id));
+  }
+
+  function handleShare(songMeta: SongMeta) {
+    // Share needs the full Song document (snapshot payload); the editor owns
+    // that flow, so route there. Metadata-only cost discipline is preserved.
+    router.push(`/songs/${songMeta.id}`);
+    toast.info("Open the song, then use Share to create a view-only link.");
+  }
+
+  function runAction(action: SongActionId, song: SongMeta) {
+    switch (action) {
+      case "open":
+        router.push(`/songs/${song.id}`);
+        break;
+      case "rehearsal":
+        router.push(`/songs/${song.id}/rehearsal`);
+        break;
+      case "share":
+        handleShare(song);
+        break;
+      case "duplicate":
+        handleDuplicate(song);
+        break;
+      case "delete":
+        handleDelete(song);
+        break;
+    }
+  }
+
+  const actionHandlers = {
+    onOpen: (song: SongMeta) => runAction("open", song),
+    onRehearsal: (song: SongMeta) => runAction("rehearsal", song),
+    onShare: (song: SongMeta) => runAction("share", song),
+    onDuplicate: (song: SongMeta) => runAction("duplicate", song),
+    onDelete: (song: SongMeta) => runAction("delete", song),
+  };
+
+  function renderActionItems(
+    song: SongMeta,
+    Item: typeof ContextMenuItem,
+    Separator: typeof ContextMenuSeparator,
+  ) {
+    return (
+      <>
+        <Item onClick={() => actionHandlers.onOpen(song)}>
+          <Library data-icon="inline-start" />
+          Open
+        </Item>
+        <Item onClick={() => actionHandlers.onRehearsal(song)}>
+          <Eye data-icon="inline-start" />
+          Rehearsal / Preview
+        </Item>
+        <Item onClick={() => actionHandlers.onShare(song)}>
+          <Share2 data-icon="inline-start" />
+          Share
+        </Item>
+        <Separator />
+        <Item onClick={() => actionHandlers.onDuplicate(song)}>
+          <Copy data-icon="inline-start" />
+          Duplicate
+        </Item>
+        <Separator />
+        <Item className="text-destructive data-[variant=destructive]:text-destructive" onClick={() => actionHandlers.onDelete(song)}>
+          <Trash data-icon="inline-start" />
+          Delete
+        </Item>
+      </>
+    );
   }
 
   return (
     <div className="mx-auto w-full max-w-[1100px] px-4 py-8 sm:px-6 lg:px-8">
-      {/* Header */}
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            {workspaceName}
-          </p>
-          <h1 className="mt-1 truncate text-3xl font-semibold tracking-tight text-foreground">
-            {firstName ? `Welcome back, ${firstName}` : "Welcome back"}
-          </h1>
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">My Workspace</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {songs.length === 0
-              ? "Set up your first rehearsal script and it will live here."
-              : songs.length === 1
-                ? "1 song in this workspace."
-                : `${songs.length} songs in this workspace.`}
+              ? "Your rehearsal scripts will live here."
+              : `${songs.length} song${songs.length === 1 ? "" : "s"}, most recently updated first.`}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <Button type="button" size="sm" onClick={() => setIsNewSongOpen(true)}>
-            <Plus data-icon="inline-start" />
-            New song
-          </Button>
-          <Button render={<Link href="/songs" />} variant="outline" size="sm">
-            <Library data-icon="inline-start" />
-            All songs
-          </Button>
-        </div>
+        <label className="relative block w-full sm:w-72">
+          <span className="sr-only">Search songs</span>
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search songs"
+            className="pl-9"
+          />
+        </label>
       </header>
 
-      {/* Error / loading */}
       {error ? (
         <Card className="mt-8 border-destructive/40 bg-destructive/5">
           <CardContent className="flex flex-col items-start gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -103,81 +219,110 @@ export function WorkspaceHomePage() {
         </Card>
       ) : null}
 
-      {/* Empty state doubles as onboarding surface */}
-      {!isLoading && !error && songs.length === 0 ? (
-        <Card className="mt-10 border-border/70 bg-card/80 shadow-2xl shadow-background/20">
-          <CardHeader>
-            <CardTitle className="text-2xl">Start your first song</CardTitle>
-            <CardDescription>
-              ChoirScript keeps annotated rehearsal scripts for your choir — lyrics, SATB cues,
-              techniques, and timing — saved to the {workspaceName}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row">
-            <Button type="button" onClick={() => setIsNewSongOpen(true)}>
-              <Plus data-icon="inline-start" />
-              New song
-            </Button>
-            <Button type="button" variant="outline" onClick={handleQuickCreate} disabled={isCreating}>
-              {isCreating ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
-              Quick start (no details yet)
-            </Button>
-            <Button type="button" variant="ghost" onClick={() => setIsTipsOpen(true)}>
-              Show tips
-            </Button>
-          </CardContent>
-        </Card>
+      {isLoading && !error ? (
+        <div className="mt-10 flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Loading songs...
+        </div>
       ) : null}
 
-      {/* Recent songs */}
-      {songs.length > 0 ? (
-        <section className="mt-10">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              <ClockIcon className="size-4" />
-              Recent songs
-            </h2>
-            <Link
-              href="/songs/recent"
-              className="flex items-center gap-1 text-sm text-muted-foreground underline-offset-2 transition hover:text-foreground hover:underline"
-            >
-              View all
-              <ArrowRight className="size-3.5" />
-            </Link>
-          </div>
+      {!isLoading && !error && songs.length === 0 ? (
+        <div className="mt-10 rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-center">
+          <p className="text-lg font-medium text-foreground">No songs yet</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+            Create your first rehearsal script — lyrics, SATB cues and timing live together in one
+            song.
+          </p>
+          <Button type="button" className="mt-5" onClick={() => setIsNewSongOpen(true)}>
+            <Plus data-icon="inline-start" />
+            Create your first song
+          </Button>
+        </div>
+      ) : null}
 
-          {isLoading ? (
-            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Loading songs...
-            </div>
-          ) : (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {recentSongs.map((song) => (
-                <Link
-                  key={song.id}
-                  href={`/songs/${song.id}`}
-                  className="group rounded-2xl border border-border bg-card/70 p-4 transition hover:border-sidebar-accent hover:bg-sidebar-accent/40"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                      {song.title || "Untitled Song"}
-                    </span>
-                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {song.mode === "advanced" ? "Timed" : "Simple"}
-                    </span>
+      {!isLoading && !error && songs.length > 0 ? (
+        <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-card/60">
+          {visibleSongs.map((song) => (
+            <ContextMenu key={song.id}>
+              <ContextMenuTrigger
+                render={
+                  <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3 transition last:border-b-0 hover:bg-sidebar-accent/30">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {song.title || "Untitled Song"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {[song.artist, song.key, song.tempo].filter(Boolean).join(" / ") ||
+                          "No details"}
+                        {" · "}
+                        Updated {formatUpdated(song.updatedAt)}
+                      </p>
+                    </div>
                   </div>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {[song.artist, song.key, song.tempo].filter(Boolean).join(" / ") || "No details"}
-                  </p>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Updated {formatUpdated(song.updatedAt)}
-                  </p>
-                </Link>
-              ))}
+                }
+              />
+              {/* Row click opens the song */}
+              <button
+                type="button"
+                aria-label={`Open ${song.title || "Untitled Song"}`}
+                className="absolute inset-0 size-full cursor-pointer opacity-0"
+                onClick={() => runAction("open", song)}
+                tabIndex={-1}
+              />
+              {pendingId === song.id ? (
+                <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+              ) : (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreVertical />
+                        <span className="sr-only">Song actions</span>
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    {(
+                      [
+                        { id: "open" as SongActionId, label: "Open", icon: Library, separator: false },
+                        { id: "rehearsal" as SongActionId, label: "Rehearsal / Preview", icon: Eye, separator: false },
+                        { id: "share" as SongActionId, label: "Share", icon: Share2, separator: false },
+                        { id: "duplicate" as SongActionId, label: "Duplicate", icon: Copy, separator: true },
+                        { id: "delete" as SongActionId, label: "Delete", icon: Trash, separator: true },
+                      ]
+                    ).map((action) => (
+                      <div key={action.id} className="contents">
+                        {action.separator ? <DropdownMenuSeparator /> : null}
+                        <DropdownMenuItem
+                          variant={action.id === "delete" ? "destructive" : "default"}
+                          onClick={() => runAction(action.id, song)}
+                        >
+                          <action.icon data-icon="inline-start" />
+                          {action.label}
+                        </DropdownMenuItem>
+                      </div>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {/* Right-click menu — same actions */}
+              <ContextMenuContent>
+                {renderActionItems(song, ContextMenuItem, ContextMenuSeparator)}
+              </ContextMenuContent>
+            </ContextMenu>
+          ))}
+          {visibleSongs.length === 0 ? (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              No songs match that search.
             </div>
-          )}
-        </section>
+          ) : null}
+        </div>
       ) : null}
 
       <NewSongDialog
@@ -185,28 +330,15 @@ export function WorkspaceHomePage() {
         onClose={() => setIsNewSongOpen(false)}
         onCreate={(metadata) => {
           setIsNewSongOpen(false);
-          handleCreateFromDialog(metadata);
+          withPending("create", async () => {
+            const meta = await createSong(metadata);
+            if (meta) {
+              router.push(`/songs/${meta.id}`);
+            }
+          });
         }}
       />
       <OnboardingDialog open={isTipsOpen} onOpenChange={setIsTipsOpen} />
     </div>
   );
-
-  async function handleCreateFromDialog(
-    metadata: Parameters<typeof createSong>[0],
-  ) {
-    try {
-      const meta = await createSong(metadata);
-      if (meta) {
-        router.push(`/songs/${meta.id}`);
-      }
-    } catch (createError) {
-      console.error("Could not create song", createError);
-      toast.error(
-        createError instanceof Error
-          ? createError.message
-          : "Could not create the song. Please try again.",
-      );
-    }
-  }
 }

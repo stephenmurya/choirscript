@@ -116,22 +116,22 @@ async function ensureUserProfile(
 
   const existing = snapshot.data() as UserProfile;
 
-  // Keep the profile in sync with auth provider details without rewriting
-  // user-owned fields (defaultWorkspaceId).
-  if (
-    existing.displayName !== (user.displayName || fallbackName) ||
-    existing.photoURL !== (user.photoURL ?? undefined)
-  ) {
+  // ONLY synchronize provider-owned fields (photoURL). The Firestore
+  // displayName is user-owned after first creation: it is seeded from the
+  // auth provider when the profile is created, then managed exclusively via
+  // Settings (updateUserDisplayName). Overwriting it here on every bootstrap
+  // would revert a user's chosen name whenever Firebase Auth still carries
+  // the original provider displayName.
+  if (existing.photoURL !== (user.photoURL ?? undefined)) {
     const updated: UserProfile = {
       ...existing,
-      displayName: user.displayName || fallbackName,
       photoURL: user.photoURL ?? undefined,
       updatedAt: now,
     };
 
-    logBootstrap("syncing user profile from auth provider");
+    logBootstrap("syncing user photo from auth provider");
     await setDoc(profileRef, updated);
-    logBootstrap("user profile synced");
+    logBootstrap("user photo synced");
     return updated;
   }
 

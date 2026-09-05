@@ -26,7 +26,6 @@ import { AdvancedTimingLine } from "./AdvancedTimingLine";
 import { LyricLineBlock } from "./LyricLineBlock";
 import { LyricsImporter } from "./LyricsImporter";
 import { ModeToggle } from "./ModeToggle";
-import { RawMarkupPreview } from "./RawMarkupPreview";
 import { SlashCommandLine } from "./SlashCommandLine";
 import { TechniqueContextMenu } from "./TechniqueContextMenu";
 import { TimingScopeSelector } from "./TimingScopeSelector";
@@ -112,6 +111,61 @@ export function DocumentScriptEditor({
   const [techniqueMenuPosition, setTechniqueMenuPosition] = useState<MenuPosition | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const sectionTitleRefs = useRef(new Map<string, HTMLInputElement>());
+  const emptyStateFocusedRef = useRef(false);
+
+  // The lyric editing surface is syllable-token based: an empty song has no
+  // tokens to receive native focus. The closest REAL editable element is the
+  // first section's SlashCommandLine input (the same input used to type the
+  // first lyric line). Focusing it gives a genuine browser caret so users can
+  // type immediately. Only runs for genuinely empty songs, only once per
+  // mount — never hijacks focus for populated songs.
+  const isEmptySong =
+    song.sections.length === 0 ||
+    song.sections.every((section) => section.lines.length === 0);
+
+  useEffect(() => {
+    if (!isEmptySong || emptyStateFocusedRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const firstInput = document.querySelector<HTMLInputElement>(
+        '[data-empty-song-focus="true"] input',
+      );
+
+      if (firstInput) {
+        firstInput.focus();
+        emptyStateFocusedRef.current = true;
+      }
+    }, 60);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isEmptySong]);
+
+  // Clicking the empty document surface also moves focus to the editable line.
+  useEffect(() => {
+    if (!isEmptySong) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as HTMLElement;
+      const surface = target.closest('[data-empty-song-surface="true"]');
+
+      if (!surface || target.closest("input, button, textarea, a, label")) {
+        return;
+      }
+
+      const firstInput = document.querySelector<HTMLInputElement>(
+        '[data-empty-song-focus="true"] input',
+      );
+
+      firstInput?.focus();
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isEmptySong]);
 
   useEffect(() => {
     if (!focusedSectionId) {
@@ -354,18 +408,14 @@ export function DocumentScriptEditor({
           ))}
 
           {song.sections.length === 0 ? (
-            <SlashCommandLine onCreateSection={() => onCreateSectionAfter(null)} />
+            <div data-empty-song-focus="true" data-empty-song-surface="true">
+              <SlashCommandLine onCreateSection={() => onCreateSectionAfter(null)} />
+              <p className="mt-2 px-1 text-xs text-muted-foreground">
+                Type your first lyric line and press Enter, or press / for options.
+              </p>
+            </div>
           ) : null}
         </div>
-
-        <details className="no-print mt-10 rounded-2xl border border-border bg-muted/20 p-3">
-          <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
-            Raw markup preview
-          </summary>
-          <div className="mt-3">
-            <RawMarkupPreview sections={song.sections} />
-          </div>
-        </details>
       </div>
 
       <TechniqueContextMenu

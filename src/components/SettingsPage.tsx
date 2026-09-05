@@ -80,7 +80,13 @@ export function SettingsPage() {
     setIsSavingName(true);
 
     try {
-      await updateUserDisplayName(user.uid, displayName);
+      await updateUserDisplayName(user.uid, displayName, {
+        workspaceId: workspace?.id,
+      });
+      // Refresh the auth user so navbar/avatar identity reflects the new
+      // name immediately (Firebase Auth profile was updated server-side by
+      // the helper; reload() makes currentUser pick it up).
+      await user.reload();
       toast.success("Display name updated");
     } catch (error) {
       console.error("Could not update display name", error);

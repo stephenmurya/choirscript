@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { getFirebaseFirestore } from "./client";
+import { updateProfile } from "firebase/auth";
+import { getFirebaseAuth, getFirebaseFirestore } from "./client";
 import type { UserProfile, Workspace } from "./types";
 
 /**
@@ -72,8 +73,21 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   };
 }
 
-/** Persist a profile display-name change alongside the Firebase Auth profile. */
-export async function updateUserDisplayName(uid: string, displayName: string): Promise<void> {
+/**
+ * Persist a display-name change with full consistency:
+ * 1. users/{uid} — the canonical, reload-surviving profile (source of truth)
+ * 2. Firebase Auth currentUser.displayName — keeps the signed-in identity in
+ *    sync so auth-provider surfaces don't show a stale name
+ * 3. workspaces/{wid}/members/{uid}.displayName — denormalized member info
+ *
+ * The Firestore write is the persistence guarantee; the other two are best
+ * effort so an auth.write failure never loses the canonical change.
+ */
+export async function updateUserDisplayName(
+  uid: string,
+  displayName: string,
+  options: { workspaceId?: string } = {},
+): Promise<void> {
   const trimmed = displayName.trim();
 
   if (!trimmed) {
@@ -82,9 +96,33 @@ export async function updateUserDisplayName(uid: string, displayName: string): P
 
   const db = await getFirebaseFirestore();
 
+  // 1. Canonical profile write (rules: users/{uid} is self-writable).
   await setDoc(
     doc(db, "users", uid),
     { displayName: trimmed, updatedAt: new Date().toISOString() },
     { merge: true },
   );
+
+  // 2. Best-effort Firebase Auth profile sync (non-fatal).
+  try {
+    const auth = await getFirebaseAuth();
+    if (auth.currentUser) {
+      await updateProfile(auth.currentUser, { displayName: trimmed });
+    }
+  } catch (error) {
+    console.error("Could not sync Firebase Auth displayName", error);
+  }
+
+  // 3. Best-effort member doc sync (non-fatal).
+  if (options.workspaceId) {
+    try {
+      await setDoc(
+        doc(db, "workspaces", options.workspaceId, "members", uid),
+        { displayName: trimmed, updatedAt: new Date().toISOString() },
+        { merge: true },
+      );
+    } catch (error) {
+      console.error("Could not sync workspace member displayName", error);
+    }
+  }
 }

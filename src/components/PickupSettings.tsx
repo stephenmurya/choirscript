@@ -24,7 +24,9 @@ export function PickupSettings({ settings, onChange }: PickupSettingsProps) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <Label htmlFor="pickup-bar">Pickup bar</Label>
+        <Label htmlFor="pickup-bar" className="flex-row items-center">
+          Pickup bar
+        </Label>
         <Switch
           id="pickup-bar"
           checked={settings.hasPickupBar}
