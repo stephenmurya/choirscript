@@ -9,7 +9,7 @@ import {
   type User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, writeBatch, type Firestore } from "firebase/firestore";
-import { getFirebaseAuth, getFirebaseFirestore } from "./client";
+import { getFirebaseAuth, getFirebaseFirestore, getInitializedFirebaseAuth } from "./client";
 import type { UserProfile, WorkspaceMember, WorkspaceRole } from "./types";
 
 export type AuthResult = {
@@ -242,23 +242,39 @@ export async function bootstrapUserWorkspace(user: User): Promise<AuthResult> {
 
 export { describeFirestoreErrorCode };
 
-export async function signInWithGoogle(): Promise<User> {
-  const auth = await getFirebaseAuth();
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: "select_account" });
+/**
+ * Google popup sign-in.
+ *
+ * REQUIRES the caller to have awaited ensureFirebaseAuthReady() beforehand
+ * (AuthProvider does this at mount, and LoginPage gates the Google button on
+ * auth readiness). Reads the cached Auth instance synchronously and calls
+ * signInWithPopup() with no awaits, dynamic imports, or initialization
+ * promises in between — keeping the popup maximally coupled to the click's
+ * transient user activation. Throws synchronously if Auth isn't ready yet.
+ */
+export function signInWithGoogle(): Promise<User> {
+  const auth = getInitializedFirebaseAuth();
 
-  try {
-    const credential = await signInWithPopup(auth, provider);
-    return credential.user;
-  } catch (error) {
-    // Dev-only: surface the raw Firebase code so auth/popup-blocked,
-    // auth/unauthorized-domain, auth/popup-closed-by-user etc. are
-    // distinguishable instead of only the friendly user copy.
-    if (process.env.NODE_ENV === "development") {
-      console.error("[google-signin] failed with Firebase code:", describeAuthErrorCode(error), error);
-    }
-    throw error;
+  if (!auth) {
+    return Promise.reject(
+      new Error("Sign-in is still initializing. Please try again in a moment."),
+    );
   }
+
+  const provider = new GoogleAuthProvider();
+
+  // NOTE: no awaits / dynamic imports / init promises between here and the
+  // popup call — the popup must be attributable to the user gesture.
+  return signInWithPopup(auth, provider)
+    .then((credential) => credential.user)
+    .catch((error) => {
+    // TEMPORARY (production diagnostics): log the raw Firebase code so
+    // auth/popup-blocked vs auth/unauthorized-domain vs
+    // auth/popup-closed-by-user is distinguishable in the deployed console.
+    // Remove once the sign-in issue is resolved. No tokens/secrets are logged.
+    console.error(`[google-signin] ${describeAuthErrorCode(error)}`, error);
+    throw error;
+  });
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<User> {

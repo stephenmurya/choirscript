@@ -49,15 +49,39 @@ export async function getFirebaseAuth(): Promise<Auth> {
   return getAuth(app);
 }
 
+// ---------------------------------------------------------------------------
+// Synchronous access to an already-initialized Auth instance.
+//
+// signInWithPopup() must be invoked as directly as possible from the click
+// gesture: every awaited Promise between the click and the popup call risks
+// the browser expiring transient user activation (auth/popup-blocked in
+// production, never reproducible on localhost where init is instant).
+// Initialization is kicked off at mount time; the click path reads the cached
+// instance synchronously.
+// ---------------------------------------------------------------------------
+
+let cachedAuth: Auth | null = null;
+let authReadyPromise: Promise<Auth> | null = null;
+
+/** Begin (or join) Firebase Auth initialization; resolves with the Auth instance. */
+export function ensureFirebaseAuthReady(): Promise<Auth> {
+  if (!authReadyPromise) {
+    authReadyPromise = getFirebaseAuth().then((auth) => {
+      cachedAuth = auth;
+      return auth;
+    });
+  }
+
+  return authReadyPromise;
+}
+
 /**
- * Start Firebase auth initialization ahead of a user gesture. Call this on
- * mount of auth UI so that by the time the user clicks a sign-in button,
- * getFirebaseAuth() resolves from cache in a single microtask and
- * signInWithPopup() stays maximally coupled to the click's transient user
- * activation (avoids production auth/popup-blocked on cold loads).
+ * Synchronous accessor for the initialized Auth instance. Returns null until
+ * ensureFirebaseAuthReady() has resolved — callers must gate UI (e.g. the
+ * Google sign-in button) on a non-null value.
  */
-export function warmUpFirebaseAuth(): Promise<Auth> {
-  return getFirebaseAuth();
+export function getInitializedFirebaseAuth(): Auth | null {
+  return cachedAuth;
 }
 
 export async function getFirebaseFirestore(): Promise<Firestore> {

@@ -11,7 +11,10 @@ import {
   signInWithGoogle,
   signUpWithEmail,
 } from "@/lib/firebase/auth";
-import { warmUpFirebaseAuth } from "@/lib/firebase/client";
+import {
+  ensureFirebaseAuthReady,
+  getInitializedFirebaseAuth,
+} from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,13 +38,35 @@ export function LoginPage() {
   const resetSent = resetSentByMode[mode];
 
   // Kick off Firebase auth initialization at mount so that the Google popup
-  // can be opened with minimal delay from the click gesture. Without this,
-  // a cold production load can insert enough async delay between the click
-  // and signInWithPopup() for the browser to consider the popup not
-  // user-initiated (auth/popup-blocked).
+  // can be invoked synchronously from the click gesture (no async boundary
+  // between click and signInWithPopup — avoids production popup-blocked from
+  // user-activation expiry). The Google button stays disabled until the Auth
+  // instance is actually ready.
+  const [isAuthReady, setIsAuthReady] = useState(
+    () => getInitializedFirebaseAuth() !== null,
+  );
+
   useEffect(() => {
-    warmUpFirebaseAuth().catch(() => undefined);
-  }, []);
+    if (isAuthReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    ensureFirebaseAuthReady()
+      .then(() => {
+        if (!cancelled) {
+          setIsAuthReady(true);
+        }
+      })
+      .catch((error) => {
+        console.error("Firebase auth initialization failed", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthReady]);
 
   function updateField(field: keyof typeof initialState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -120,12 +145,12 @@ export function LoginPage() {
               variant="outline"
               className="w-full"
               onClick={handleGoogle}
-              disabled={isBusy}
+              disabled={isBusy || !isAuthReady}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4" fill="currentColor">
                 <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81" />
               </svg>
-              Continue with Google
+              {isAuthReady ? "Continue with Google" : "Loading sign-in..."}
             </Button>
 
             <div className="flex items-center gap-3">

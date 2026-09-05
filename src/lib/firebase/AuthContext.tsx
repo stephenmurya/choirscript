@@ -11,7 +11,7 @@ import {
 } from "react";
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { bootstrapUserWorkspace } from "./auth";
-import { getFirebaseAuth, isFirebaseConfigured } from "./client";
+import { ensureFirebaseAuthReady, isFirebaseConfigured } from "./client";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "unconfigured";
 
@@ -44,7 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function subscribe() {
-      const auth = await getFirebaseAuth();
+      // Initializes Firebase Auth once at app start and caches the instance
+      // for synchronous access by the Google popup click path.
+      const auth = await ensureFirebaseAuthReady();
 
       const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
         if (cancelled) {

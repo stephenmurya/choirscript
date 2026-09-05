@@ -26,6 +26,7 @@ type ShareResponse = {
   shareId: string;
   url: string;
   error?: string;
+  diagnostic?: string;
 };
 
 export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
@@ -79,13 +80,19 @@ export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
       const result = (await response.json()) as ShareResponse;
 
       if (!response.ok || !result.url) {
-        throw new Error(result.error || "Could not create share link");
+        throw new Error(
+          result.diagnostic
+            ? `${result.error || "Could not create share link"} (${result.diagnostic})`
+            : result.error || "Could not create share link",
+        );
       }
 
       setShareUrl(result.url);
       toast.success("Share link created");
-    } catch {
-      toast.error("Could not create share link");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not create share link",
+      );
     } finally {
       setIsCreating(false);
     }

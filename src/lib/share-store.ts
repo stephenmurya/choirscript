@@ -6,6 +6,28 @@ import type { SharedSongPayload, Song } from "./songTypes";
 
 const SHARE_ID_PATTERN = /^[A-Za-z0-9_-]{10,32}$/;
 
+/**
+ * Development-safe diagnostic: which credential model the Blob SDK will
+ * resolve in this environment. Values only — never prints token contents.
+ */
+function logBlobAuthMode() {
+  const hasReadWrite = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  const hasOidc = Boolean(process.env.VERCEL_OIDC_TOKEN);
+  const hasStoreId = Boolean(process.env.BLOB_STORE_ID);
+
+  const mode = hasReadWrite
+    ? "read-write-token (BLOB_READ_WRITE_TOKEN)"
+    : hasOidc && hasStoreId
+      ? "oidc (VERCEL_OIDC_TOKEN + BLOB_STORE_ID)"
+      : hasOidc
+        ? "oidc-token-only (MISSING BLOB_STORE_ID — SDK will fall through to token lookup and fail)"
+        : "none";
+
+  console.log(
+    `[share] Blob auth mode: ${mode} | BLOB_READ_WRITE_TOKEN=${hasReadWrite} VERCEL_OIDC_TOKEN=${hasOidc} BLOB_STORE_ID=${hasStoreId}`,
+  );
+}
+
 function sharePathname(shareId: string) {
   return `shares/${shareId}.json`;
 }
@@ -20,6 +42,8 @@ export function validateShareId(shareId: string) {
 }
 
 export async function createSharedSong(song: Song): Promise<{ shareId: string; url: string }> {
+  logBlobAuthMode();
+
   const shareId = nanoid(10);
   const now = new Date().toISOString();
   const payload: SharedSongPayload = {
