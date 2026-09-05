@@ -12,6 +12,8 @@ import {
 import { onAuthStateChanged, type User } from "firebase/auth";
 import { bootstrapUserWorkspace } from "./auth";
 import { ensureFirebaseAuthReady, isFirebaseConfigured } from "./client";
+import { getWorkspace } from "./workspace";
+import type { Workspace } from "./types";
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated" | "unconfigured";
 
@@ -19,6 +21,10 @@ export type AuthContextValue = {
   status: AuthStatus;
   user: User | null;
   workspaceId: string | null;
+  /** The current (default) workspace document; identity for the shell. */
+  workspace: Workspace | null;
+  /** Replace the cached workspace doc locally (used by settings rename). */
+  setWorkspace: (workspace: Workspace | null) => void;
   /** Server-side failure during profile/workspace bootstrap, if any. */
   bootstrapError: string | null;
   /** Retry bootstrap after a failure. */
@@ -33,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [user, setUser] = useState<User | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
 
@@ -57,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!nextUser) {
           setWorkspaceId(null);
+          setWorkspace(null);
           setBootstrapError(null);
           setStatus("unauthenticated");
           return;
@@ -72,6 +80,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             setWorkspaceId(result.workspaceId);
             setStatus("authenticated");
+            // Identity read is non-blocking for the shell; a failure here
+            // degrades to the fallback name rather than blocking the app.
+            getWorkspace(result.workspaceId)
+              .then((doc) => {
+                if (!cancelled) {
+                  setWorkspace(doc);
+                }
+              })
+              .catch((error) => {
+                console.error("Could not load workspace identity", error);
+              });
           })
           .catch((error) => {
             console.error("Workspace bootstrap failed", error);
@@ -111,8 +130,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, workspaceId, bootstrapError, retryBootstrap }),
-    [status, user, workspaceId, bootstrapError, retryBootstrap],
+    () => ({
+      status,
+      user,
+      workspaceId,
+      workspace,
+      setWorkspace,
+      bootstrapError,
+      retryBootstrap,
+    }),
+    [status, user, workspaceId, workspace, bootstrapError, retryBootstrap],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

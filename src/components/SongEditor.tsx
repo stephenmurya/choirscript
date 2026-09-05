@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/card";
 import { AppShell } from "./AppShell";
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
+import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 
 type SongEditorProps = {
   songId: string;
@@ -462,92 +463,94 @@ export function SongEditor({ songId }: SongEditorProps) {
             ? "Save failed"
             : "Loading";
 
-  if (notFound) {
-    return (
-      <AppShell activeSongId={songId} saveStatus="Not found">
-        <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
-          <Card className="w-full max-w-xl text-center">
-            <CardHeader>
-              <CardTitle>Song not found</CardTitle>
-              <CardDescription>
-                This song may have been deleted from your workspace.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button render={<Link href="/" />}>Return to songs</Button>
-            </CardContent>
-          </Card>
-        </div>
+  // Editor pages live outside the (workspace) route group (focused-editor
+  // layout), so AppShell is wrapped in the songs provider inline below.
+  const shell = (content: ReactNode) => (
+    <WorkspaceSongsProvider>
+      <AppShell
+        activeSongId={song ? song.id : songId}
+        currentSong={song}
+        saveStatus={saveStatus}
+        onSave={handleSaveNow}
+      >
+        {content}
       </AppShell>
+    </WorkspaceSongsProvider>
+  );
+
+  if (notFound) {
+    return shell(
+      <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
+        <Card className="w-full max-w-xl text-center">
+          <CardHeader>
+            <CardTitle>Song not found</CardTitle>
+            <CardDescription>
+              This song may have been deleted from your workspace.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button render={<Link href="/songs" />}>Return to songs</Button>
+          </CardContent>
+        </Card>
+      </div>,
     );
   }
 
   if (loadError) {
-    return (
-      <AppShell activeSongId={songId} saveStatus="Load failed">
-        <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
-          <Card className="w-full max-w-xl text-center">
-            <CardHeader>
-              <CardTitle>Couldn&apos;t load this song</CardTitle>
-              <CardDescription>{loadError}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button render={<Link href="/" />} variant="outline">
-                Return to songs
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </AppShell>
+    return shell(
+      <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
+        <Card className="w-full max-w-xl text-center">
+          <CardHeader>
+            <CardTitle>Couldn&apos;t load this song</CardTitle>
+            <CardDescription>{loadError}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button render={<Link href="/songs" />} variant="outline">
+              Return to songs
+            </Button>
+          </CardContent>
+        </Card>
+      </div>,
     );
   }
 
   if (!song) {
-    return (
-      <AppShell activeSongId={songId} saveStatus="Loading">
-        <main className="grid min-h-[calc(100svh-3.5rem)] place-items-center text-muted-foreground">
-          Loading editor...
-        </main>
-      </AppShell>
+    return shell(
+      <main className="grid min-h-[calc(100svh-3.5rem)] place-items-center text-muted-foreground">
+        Loading editor...
+      </main>,
     );
   }
 
-  return (
-    <AppShell
-      activeSongId={song.id}
-      currentSong={song}
-      saveStatus={saveStatus}
-      onSave={handleSaveNow}
-    >
-      <DocumentScriptEditor
-        song={song}
-        includeBass={includeBass}
-        selection={lyricSelection}
-        focusedSectionId={focusedSectionId}
-        onSectionFocusHandled={() => setFocusedSectionId(null)}
-        onMetadataChange={handleMetadataChange}
-        onRenameSection={handleRenameSection}
-        onCreateSectionAfter={handleCreateSectionAfter}
-        onAddLine={handleAddLine}
-        onGenerateScript={handleGenerateScript}
-        onModeChange={handleModeChange}
-        timingScope={timingScope}
-        onTimingScopeChange={setTimingScope}
-        onTimingSettingsChange={handleTimingSettingsChange}
-        onLineTimingChange={handleLineTimingChange}
-        hasTimingOverride={hasTimingOverride}
-        onCreateTimingOverride={handleCreateTimingOverride}
-        onResetTimingOverride={handleResetTimingOverride}
-        onSelectionChange={(nextSelection) => {
-          setLyricSelection(nextSelection);
-          setActiveSectionId(nextSelection.sectionId);
-        }}
-        onClearSelection={() => setLyricSelection(null)}
-        onApplyTechnique={handleApplyTechnique}
-        onRemoveTechnique={handleRemoveTechnique}
-        onUpdateWordSyllables={handleUpdateWordSyllables}
-        onPartCueChange={handlePartCueChange}
-      />
-    </AppShell>
+  return shell(
+    <DocumentScriptEditor
+      song={song}
+      includeBass={includeBass}
+      selection={lyricSelection}
+      focusedSectionId={focusedSectionId}
+      onSectionFocusHandled={() => setFocusedSectionId(null)}
+      onMetadataChange={handleMetadataChange}
+      onRenameSection={handleRenameSection}
+      onCreateSectionAfter={handleCreateSectionAfter}
+      onAddLine={handleAddLine}
+      onGenerateScript={handleGenerateScript}
+      onModeChange={handleModeChange}
+      timingScope={timingScope}
+      onTimingScopeChange={setTimingScope}
+      onTimingSettingsChange={handleTimingSettingsChange}
+      onLineTimingChange={handleLineTimingChange}
+      hasTimingOverride={hasTimingOverride}
+      onCreateTimingOverride={handleCreateTimingOverride}
+      onResetTimingOverride={handleResetTimingOverride}
+      onSelectionChange={(nextSelection) => {
+        setLyricSelection(nextSelection);
+        setActiveSectionId(nextSelection.sectionId);
+      }}
+      onClearSelection={() => setLyricSelection(null)}
+      onApplyTechnique={handleApplyTechnique}
+      onRemoveTechnique={handleRemoveTechnique}
+      onUpdateWordSyllables={handleUpdateWordSyllables}
+      onPartCueChange={handlePartCueChange}
+    />,
   );
 }

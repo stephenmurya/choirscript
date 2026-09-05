@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
   CheckCircle,
@@ -11,36 +11,27 @@ import {
   CloudOff,
   Copy,
   Eye,
-  FileText,
-  HelpCircle,
+  HelpCircle as HelpCircleIcon,
+  House,
+  Library,
   Loader2,
   MoreHorizontal,
   PanelLeft,
   Plus,
   Printer,
   Search,
-  Settings,
+  Settings as SettingsIcon,
   Share2,
   Trash,
 } from "lucide-react";
-import {
-  createEmptySong,
-} from "@/lib/songStorage";
 import type { Song } from "@/lib/songTypes";
-import { createSong, deleteSong as deleteCloudSong, duplicateSong as duplicateCloudSong, listSongs } from "@/lib/firebase/songs";
 import type { SongMeta } from "@/lib/firebase/types";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import { signOutUser } from "@/lib/firebase/auth";
+import { useWorkspaceSongs } from "./WorkspaceSongsContext";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,41 +73,22 @@ function songMetadata(song: Pick<SongMeta, "artist" | "key" | "tempo">) {
   return [song.artist, song.key, song.tempo].filter(Boolean).join(" / ");
 }
 
-function sortSongMetas(songs: SongMeta[]) {
-  return songs.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-function EmptyWorkspace({
-  onNewSong,
-  onShowTips,
-}: {
-  onNewSong: () => void;
-  onShowTips: () => void;
-}) {
-  return (
-    <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10">
-      <Card className="w-full max-w-lg border-border/70 bg-card/80 shadow-2xl shadow-background/20">
-        <CardHeader>
-          <CardTitle className="text-2xl">Select a song or create a new one</CardTitle>
-          <CardDescription>
-            Your rehearsal scripts are saved to your workspace in the cloud. Choose a song from
-            the sidebar, or start a new document.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 sm:flex-row">
-          <Button type="button" onClick={onNewSong}>
-            <Plus data-icon="inline-start" />
-            New Song
-          </Button>
-          <Button type="button" variant="outline" onClick={onShowTips}>
-            <HelpCircle data-icon="inline-start" />
-            Show tips
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+const NAV_ITEMS = [
+  { href: "/", label: "Home", icon: House, match: (path: string) => path === "/" },
+  {
+    href: "/songs",
+    label: "Songs",
+    icon: Library,
+    // Editor routes keep Songs highlighted without matching /songs/recent.
+    match: (path: string) => path.startsWith("/songs") && path !== "/songs/recent",
+  },
+  {
+    href: "/songs/recent",
+    label: "Recent",
+    icon: ClockIcon,
+    match: (path: string) => path === "/songs/recent",
+  },
+] as const;
 
 export function AppShell({
   activeSongId = null,
@@ -126,151 +98,113 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const router = useRouter();
-  const { user, workspaceId } = useAuth();
-  const [songs, setSongs] = useState<SongMeta[]>([]);
-  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
-  const [cloudError, setCloudError] = useState<string | null>(null);
+  const pathname = usePathname();
+  const { user, workspace } = useAuth();
+  const {
+    songs,
+    recentSongs,
+    isLoading,
+    error,
+    reload,
+    createSong,
+    duplicateSong,
+    deleteSong,
+  } = useWorkspaceSongs();
   const [searchQuery, setSearchQuery] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewSongOpen, setIsNewSongOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTipsOpen, setIsTipsOpen] = useState(false);
 
-  // Load song metadata (one-time read) once the workspace is available.
-  useEffect(() => {
-    if (!workspaceId) {
-      return;
-    }
+  const isHome = pathname === "/";
 
-    let cancelled = false;
+  // Songs in the sidebar list: search-filtered; hidden on Home where the page
+  // provides its own content instead of competing song lists.
+  const sidebarSongs = searchQuery.trim()
+    ? songs.filter((song) =>
+        [song.title, song.artist, song.key, song.tempo]
+          .filter(Boolean)
+          .some((value) => value?.toLowerCase().includes(searchQuery.trim().toLowerCase())),
+      )
+    : recentSongs;
 
-    Promise.resolve().then(() => {
-      if (!cancelled) {
-        setIsLoadingSongs(true);
-      }
-    });
-
-    listSongs(workspaceId)
-      .then((metas) => {
-        if (!cancelled) {
-          setSongs(sortSongMetas(metas));
-          setCloudError(null);
-        }
-      })
-      .catch((error) => {
-        console.error("Could not load songs", error);
-        if (!cancelled) {
-          setCloudError(
-            error instanceof Error
-              ? error.message
-              : "Could not load your songs. Check your connection and refresh.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoadingSongs(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId]);
-
-  const visibleSongs = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-
-    if (!query) {
-      return songs;
-    }
-
-    return songs.filter((song) =>
-      [song.title, song.artist, song.key, song.tempo]
-        .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(query)),
-    );
-  }, [searchQuery, songs]);
-
-  function handleCreateSong(
+  async function handleCreateSong(
     metadata: Pick<Song, "title"> & Partial<Pick<Song, "artist" | "key" | "tempo">>,
   ) {
-    if (!workspaceId || !user) {
-      toast.error("Still loading your workspace. Please try again in a moment.");
-      return;
+    try {
+      const meta = await createSong(metadata);
+      if (!meta) {
+        toast.error("Still loading your workspace. Please try again in a moment.");
+        return;
+      }
+      setIsNewSongOpen(false);
+      setIsSidebarOpen(false);
+      router.push(`/songs/${meta.id}`);
+    } catch (createError) {
+      console.error("Could not create song", createError);
+      toast.error(
+        createError instanceof Error
+          ? createError.message
+          : "Could not create the song. Please try again.",
+      );
     }
-
-    const song: Song = {
-      ...createEmptySong(),
-      ...metadata,
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Optimistic insert; reconcile with the server-generated metadata.
-    createSong(workspaceId, song, user.uid)
-      .then((meta) => {
-        setSongs((current) => sortSongMetas([meta, ...current.filter((item) => item.id !== meta.id)]));
-        setIsNewSongOpen(false);
-        setIsSidebarOpen(false);
-        router.push(`/songs/${meta.id}`);
-      })
-      .catch((error) => {
-        console.error("Could not create song", error);
-        toast.error(
-          error instanceof Error ? error.message : "Could not create the song. Please try again.",
-        );
-      });
   }
 
-  function handleDuplicate(songMeta: SongMeta) {
-    if (!workspaceId || !user) {
-      return;
-    }
-
-    duplicateCloudSong(workspaceId, songMeta.id, user.uid)
-      .then((copyMeta) => {
-        setSongs((current) => sortSongMetas([copyMeta, ...current]));
+  async function handleDuplicate(songMeta: SongMeta) {
+    try {
+      const copyMeta = await duplicateSong(songMeta.id);
+      if (copyMeta) {
         router.push(`/songs/${copyMeta.id}`);
-      })
-      .catch((error) => {
-        console.error("Could not duplicate song", error);
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Could not duplicate the song. Please try again.",
-        );
-      });
+      }
+    } catch (duplicateError) {
+      console.error("Could not duplicate song", duplicateError);
+      toast.error(
+        duplicateError instanceof Error
+          ? duplicateError.message
+          : "Could not duplicate the song. Please try again.",
+      );
+    }
   }
 
-  function handleDelete(songMeta: SongMeta) {
-    if (!workspaceId) {
-      return;
-    }
-
+  async function handleDelete(songMeta: SongMeta) {
     if (!window.confirm(`Delete "${songMeta.title || "Untitled Song"}"?`)) {
       return;
     }
 
-    // Optimistic removal; restore on failure.
-    const previousSongs = songs;
-    setSongs((current) => current.filter((item) => item.id !== songMeta.id));
-
-    deleteCloudSong(workspaceId, songMeta.id).catch((error) => {
-      console.error("Could not delete song", error);
-      setSongs(previousSongs);
+    try {
+      await deleteSong(songMeta.id);
+      if (songMeta.id === activeSongId) {
+        router.push("/");
+      }
+    } catch (deleteError) {
+      console.error("Could not delete song", deleteError);
       toast.error(
-        error instanceof Error ? error.message : "Could not delete the song. Please try again.",
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not delete the song. Please try again.",
       );
-    });
-
-    if (songMeta.id === activeSongId) {
-      router.push("/");
     }
   }
 
   function openShareDialog() {
     onSave?.();
     setIsShareOpen(true);
+  }
+
+  function metaFromSong(song: Song): SongMeta {
+    return {
+      id: song.id,
+      title: song.title,
+      artist: song.artist,
+      key: song.key,
+      tempo: song.tempo,
+      mode: song.mode,
+      createdAt: song.createdAt,
+      updatedAt: song.updatedAt,
+      createdBy: user?.uid ?? "",
+      updatedBy: user?.uid ?? "",
+      schemaVersion: 1,
+    };
   }
 
   function renderSidebarContent() {
@@ -290,7 +224,7 @@ export function AppShell({
                 ChoirScript
               </span>
               <span className="block truncate text-xs text-muted-foreground">
-                Choir direction editor
+                {workspace?.name || "My Workspace"}
               </span>
             </span>
           </Link>
@@ -299,157 +233,175 @@ export function AppShell({
             <Plus data-icon="inline-start" />
             New Song
           </Button>
-
-          <label className="relative block">
-            <span className="sr-only">Search songs</span>
-            <Search
-              aria-hidden="true"
-              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search songs"
-              className="pl-9"
-            />
-          </label>
         </div>
 
         <div className="px-3">
           <nav className="flex flex-col gap-1">
-            <Link
-              href="/"
-              onClick={() => setIsSidebarOpen(false)}
-              className={cn(
-                "flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                !activeSongId && "bg-sidebar-accent text-sidebar-accent-foreground",
-              )}
-            >
-              <FileText data-icon="inline-start" />
-              All Songs
-              <Badge variant="secondary" className="ml-auto">
-                {songs.length}
-              </Badge>
-            </Link>
-            <button
-              type="button"
-              className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <ClockIcon data-icon="inline-start" />
-              Recent
-            </button>
+            {NAV_ITEMS.map((item) => {
+              const isActive = item.match(pathname);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={cn(
+                    "flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+                  )}
+                >
+                  <item.icon data-icon="inline-start" />
+                  {item.label}
+                  {item.label === "Songs" ? (
+                    <Badge variant="secondary" className="ml-auto">
+                      {songs.length}
+                    </Badge>
+                  ) : null}
+                </Link>
+              );
+            })}
             <button
               type="button"
               onClick={() => setIsTipsOpen(true)}
               className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
-              <HelpCircle data-icon="inline-start" />
+              <HelpCircleIcon data-icon="inline-start" />
               Tips / Help
-            </button>
-            <button
-              type="button"
-              disabled
-              className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground/60"
-            >
-              <Settings data-icon="inline-start" />
-              Settings
             </button>
           </nav>
         </div>
 
-        <Separator className="my-3" />
+        {!isHome ? (
+          <>
+            <Separator className="my-3" />
 
-        <div className="px-4 pb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-          Songs
-        </div>
-        <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
-          <div className="flex flex-col gap-1">
-            {isLoadingSongs ? (
-              <div className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Loading songs...
-              </div>
-            ) : cloudError ? (
-              <div className="px-4 py-8 text-sm text-destructive">
-                <CloudOff className="mb-2 size-4" />
-                {cloudError}
-              </div>
-            ) : (
-              <>
-                {visibleSongs.map((song) => {
-                  const isActive = song.id === activeSongId;
-                  const metadata = songMetadata(song);
-
-                  return (
-                    <div
-                      key={song.id}
-                      className={cn(
-                        "group/song flex items-center gap-1 rounded-2xl px-2 py-1 transition",
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground hover:bg-sidebar-accent/70",
-                      )}
-                    >
-                      <Link
-                        href={`/songs/${song.id}`}
-                        onClick={() => setIsSidebarOpen(false)}
-                        className="min-w-0 flex-1 rounded-xl px-2 py-2"
-                      >
-                        <span className="block truncate text-sm font-medium">
-                          {song.title || "Untitled Song"}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {metadata || `Updated ${formatUpdated(song.updatedAt)}`}
-                        </span>
-                      </Link>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              className="opacity-70 transition group-hover/song:opacity-100"
-                            />
-                          }
-                        >
-                          <MoreHorizontal />
-                          <span className="sr-only">Song actions</span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuGroup>
-                            <DropdownMenuItem onClick={() => handleDuplicate(song)}>
-                              <Copy data-icon="inline-start" />
-                              Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              variant="destructive"
-                              onClick={() => handleDelete(song)}
-                            >
-                              <Trash data-icon="inline-start" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuGroup>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  );
-                })}
-                {visibleSongs.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    No songs match that search.
+            <div className="flex items-center justify-between px-4 pb-2">
+              <span className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                {searchQuery.trim() ? "Search results" : "Recent songs"}
+              </span>
+            </div>
+            <div className="px-2 pb-2">
+              <label className="relative block">
+                <span className="sr-only">Search songs</span>
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search songs"
+                  className="pl-9"
+                />
+              </label>
+            </div>
+            <ScrollArea className="min-h-0 flex-1 px-2 pb-3">
+              <div className="flex flex-col gap-1">
+                {isLoading ? (
+                  <div className="flex items-center gap-2 px-4 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" />
+                    Loading songs...
                   </div>
-                ) : null}
-              </>
-            )}
-          </div>
-        </ScrollArea>
+                ) : error ? (
+                  <div className="px-4 py-8 text-sm text-destructive">
+                    <CloudOff className="mb-2 size-4" />
+                    {error}
+                    <button
+                      type="button"
+                      onClick={reload}
+                      className="mt-2 block text-xs underline underline-offset-2 hover:no-underline"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {sidebarSongs.map((song) => {
+                      const isActive = song.id === activeSongId;
+
+                      return (
+                        <div
+                          key={song.id}
+                          className={cn(
+                            "group/song flex items-center gap-1 rounded-2xl px-2 py-1 transition",
+                            isActive
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+                          )}
+                        >
+                          <Link
+                            href={`/songs/${song.id}`}
+                            onClick={() => setIsSidebarOpen(false)}
+                            className="min-w-0 flex-1 rounded-xl px-2 py-2"
+                          >
+                            <span className="block truncate text-sm font-medium">
+                              {song.title || "Untitled Song"}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {songMetadata(song) || `Updated ${formatUpdated(song.updatedAt)}`}
+                            </span>
+                          </Link>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  className="opacity-70 transition group-hover/song:opacity-100"
+                                />
+                              }
+                            >
+                              <MoreHorizontal />
+                              <span className="sr-only">Song actions</span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem onClick={() => handleDuplicate(song)}>
+                                  <Copy data-icon="inline-start" />
+                                  Duplicate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => handleDelete(song)}
+                                >
+                                  <Trash data-icon="inline-start" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      );
+                    })}
+                    {sidebarSongs.length === 0 ? (
+                      <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        {searchQuery.trim() ? "No songs match that search." : "No songs yet."}
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          </>
+        ) : null}
 
         <Separator className="my-3" />
 
         <div className="px-4 pb-4">
+          <Link
+            href="/settings"
+            onClick={() => setIsSidebarOpen(false)}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              pathname === "/settings" && "bg-sidebar-accent text-sidebar-accent-foreground",
+            )}
+          >
+            <SettingsIcon data-icon="inline-start" />
+            Settings
+          </Link>
           {user ? (
-            <div className="flex items-center gap-2 rounded-2xl px-2 py-1">
+            <div className="mt-2 flex items-center gap-2 rounded-2xl px-2 py-1">
               <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
                 {user.photoURL ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -471,8 +423,8 @@ export function AppShell({
                 variant="ghost"
                 size="sm"
                 onClick={() => {
-                  signOutUser().catch((error) => {
-                    console.error("Sign out failed", error);
+                  signOutUser().catch((signOutError) => {
+                    console.error("Sign out failed", signOutError);
                     toast.error("Sign out failed. Please try again.");
                   });
                 }}
@@ -517,10 +469,12 @@ export function AppShell({
             </Button>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
-                {currentSong?.title || "ChoirScript"}
+                {currentSong?.title || workspace?.name || "ChoirScript"}
               </p>
               <p className="hidden truncate text-xs text-muted-foreground sm:block">
-                {currentSong ? songMetadata(currentSong) || "No metadata yet" : "Cloud choir scripts"}
+                {currentSong
+                  ? songMetadata(currentSong) || "No metadata yet"
+                  : workspace?.name || "Choir direction workspace"}
               </p>
             </div>
 
@@ -537,10 +491,16 @@ export function AppShell({
                   variant="outline"
                   size="sm"
                 >
-                    <Eye data-icon="inline-start" />
-                    Preview
+                  <Eye data-icon="inline-start" />
+                  Preview
                 </Button>
-                <Button type="button" variant="outline" size="sm" className="hidden md:inline-flex" onClick={openShareDialog}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="hidden md:inline-flex"
+                  onClick={openShareDialog}
+                >
                   <Share2 data-icon="inline-start" />
                   Share
                 </Button>
@@ -549,8 +509,8 @@ export function AppShell({
                   size="sm"
                   className="hidden sm:inline-flex"
                 >
-                    <Printer data-icon="inline-start" />
-                    Print / Save PDF
+                  <Printer data-icon="inline-start" />
+                  Print / Save PDF
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" />}>
@@ -565,28 +525,12 @@ export function AppShell({
                           Save now
                         </DropdownMenuItem>
                       ) : null}
-                      <DropdownMenuItem
-                        onClick={() =>
-                          handleDuplicate({
-                            id: currentSong.id,
-                            title: currentSong.title,
-                            artist: currentSong.artist,
-                            key: currentSong.key,
-                            tempo: currentSong.tempo,
-                            mode: currentSong.mode,
-                            createdAt: currentSong.createdAt,
-                            updatedAt: currentSong.updatedAt,
-                            createdBy: user?.uid ?? "",
-                            updatedBy: user?.uid ?? "",
-                            schemaVersion: 1,
-                          })
-                        }
-                      >
+                      <DropdownMenuItem onClick={() => handleDuplicate(metaFromSong(currentSong))}>
                         <Copy data-icon="inline-start" />
                         Duplicate song
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setIsTipsOpen(true)}>
-                        <HelpCircle data-icon="inline-start" />
+                        <HelpCircleIcon data-icon="inline-start" />
                         Show tips
                       </DropdownMenuItem>
                       <DropdownMenuItem className="md:hidden" onClick={openShareDialog}>
@@ -605,21 +549,7 @@ export function AppShell({
                     <DropdownMenuGroup>
                       <DropdownMenuItem
                         variant="destructive"
-                        onClick={() =>
-                          handleDelete({
-                            id: currentSong.id,
-                            title: currentSong.title,
-                            artist: currentSong.artist,
-                            key: currentSong.key,
-                            tempo: currentSong.tempo,
-                            mode: currentSong.mode,
-                            createdAt: currentSong.createdAt,
-                            updatedAt: currentSong.updatedAt,
-                            createdBy: user?.uid ?? "",
-                            updatedBy: user?.uid ?? "",
-                            schemaVersion: 1,
-                          })
-                        }
+                        onClick={() => handleDelete(metaFromSong(currentSong))}
                       >
                         <Trash data-icon="inline-start" />
                         Delete song
@@ -639,10 +569,9 @@ export function AppShell({
 
         <main className="min-w-0 overflow-x-hidden">
           {children ?? (
-            <EmptyWorkspace
-              onNewSong={() => setIsNewSongOpen(true)}
-              onShowTips={() => setIsTipsOpen(true)}
-            />
+            <div className="flex min-h-[calc(100svh-3.5rem)] items-center justify-center px-4 py-10 text-muted-foreground">
+              Nothing to show here yet.
+            </div>
           )}
         </main>
       </div>

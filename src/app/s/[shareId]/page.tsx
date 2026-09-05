@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { FileQuestion } from "lucide-react";
 import { getSharedSong } from "@/lib/share-store";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,43 @@ function metadataLine(payload: Awaited<ReturnType<typeof getSharedSong>>) {
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+/**
+ * Dynamic browser/social preview for shared snapshots. Uses the actual shared
+ * payload title; the payload fetch is deduped with the page render through
+ * React cache() in share-store (one Blob GET per request).
+ */
+export async function generateMetadata({
+  params,
+}: SharedSongPageProps): Promise<Metadata> {
+  const { shareId } = await params;
+  const payload = await getSharedSong(shareId);
+
+  if (!payload) {
+    return {
+      title: "Shared rehearsal script | ChoirScript",
+    };
+  }
+
+  const title = `${payload.title || "Untitled Song"} | ChoirScript`;
+  const description = `View the rehearsal script for ${
+    payload.title || "Untitled Song"
+  } on ChoirScript.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+    },
+    twitter: {
+      title,
+      description,
+    },
+  };
 }
 
 export default async function SharedSongPage({ params }: SharedSongPageProps) {

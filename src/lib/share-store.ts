@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { get, put } from "@vercel/blob";
 import { nanoid } from "nanoid";
 import type { SharedSongPayload, Song } from "./songTypes";
@@ -74,7 +75,14 @@ export async function createSharedSong(song: Song): Promise<{ shareId: string; u
   };
 }
 
-export async function getSharedSong(shareId: string): Promise<SharedSongPayload | null> {
+/**
+ * Request-scoped shared-payload fetch. generateMetadata() and the page
+ * component both need the payload for a shared link; React's cache() dedupes
+ * the (stream-consuming) Blob GET within a single server request so the body
+ * is fetched once. No cross-request caching — shares are immutable but we
+ * don't want stale streaming handles.
+ */
+export const getSharedSong = cache(async (shareId: string): Promise<SharedSongPayload | null> => {
   if (!validateShareId(shareId)) {
     return null;
   }
@@ -100,4 +108,4 @@ export async function getSharedSong(shareId: string): Promise<SharedSongPayload 
   } catch {
     return null;
   }
-}
+});
