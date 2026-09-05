@@ -214,7 +214,9 @@ function SongCard({
   isPending: boolean;
   actions: SongActionHandlers;
 }) {
-  const metadataParts = [song.key, song.tempo ? `${song.tempo} BPM` : null].filter(Boolean);
+  const metadataParts = [song.artist, song.key, song.tempo ? `${song.tempo} BPM` : null].filter(
+    Boolean,
+  );
   const modules = song.cardSummary?.modules ?? [];
   const contributors = song.cardSummary?.contributors.preview ?? [];
   const contributorTotal = song.cardSummary?.contributors.total ?? contributors.length;
@@ -273,42 +275,37 @@ function SongCard({
           )}
         </div>
 
-        {/* Secondary: artist — omitted entirely when absent */}
-        {song.artist ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{song.artist}</p>
-        ) : null}
-
-        {/* Metadata: Key · BPM — omitted when both absent */}
+        {/* Metadata: one line — artist · key · BPM (omitted when all absent) */}
         {metadataParts.length > 0 ? (
-          <p className="mt-2 truncate text-xs text-muted-foreground">
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {metadataParts.join(" · ")}
           </p>
         ) : null}
 
-        {/* Module state: icon-only presence indicators */}
-        {modules.length > 0 ? (
-          <div className="mt-3 flex items-center gap-2.5 text-muted-foreground">
-            {modules.map((moduleKey) => {
-              const entry = MODULE_ICONS[moduleKey];
+        {/* Module state: icon-only presence indicators (reserves a row so
+            cards stay consistent whether or not modules have content) */}
+        <div className="mt-3 flex h-4 items-center gap-2.5 text-muted-foreground">
+          {modules.map((moduleKey) => {
+            const entry = MODULE_ICONS[moduleKey];
 
-              if (!entry) {
-                return null;
-              }
+            if (!entry) {
+              return null;
+            }
 
-              return (
-                <Tooltip key={moduleKey}>
-                  <TooltipTrigger
-                    render={<entry.icon aria-label={entry.label} className="size-4" />}
-                  />
-                  <TooltipContent>{entry.label}</TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </div>
-        ) : null}
+            return (
+              <Tooltip key={moduleKey}>
+                <TooltipTrigger
+                  render={<entry.icon aria-label={entry.label} className="size-4" />}
+                />
+                <TooltipContent>{entry.label}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
 
-        {/* Footer: contributors left, recency right */}
-        <div className="mt-4 flex items-center justify-between gap-2 pt-1">
+        {/* Footer pinned to the card bottom: contributors left, recency right.
+            mt-auto pushes it down so all cards share the same height. */}
+        <div className="mt-auto flex items-center justify-between gap-2 pt-4">
           {contributorTotal > 0 ? (
             <ContributorGroup contributors={contributors} />
           ) : (
