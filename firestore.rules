@@ -58,9 +58,12 @@ service cloud.firestore {
       // Phase 1 requirement for users to read one another's profiles; member
       // documents inside a workspace carry the minimal display info needed.
       allow get, list: if isSelf(uid);
+      // NOTE: the initial profile payload deliberately omits
+      // defaultWorkspaceId. Accessing a missing map key in rules yields an
+      // error (not null), so absence must be tested with `in`, not `== null`.
       allow create: if isSelf(uid)
         && request.resource.data.uid == uid
-        && request.resource.data.defaultWorkspaceId == null;
+        && !('defaultWorkspaceId' in request.resource.data);
       allow update: if isSelf(uid)
         && request.resource.data.uid == uid
         && request.resource.data.createdAt == resource.data.createdAt;

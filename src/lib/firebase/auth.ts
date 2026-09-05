@@ -55,15 +55,38 @@ export function describeAuthError(error: unknown): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Development-only bootstrap diagnostics. Console noise in dev; stripped from
+// production builds via the static boolean check below.
+// ---------------------------------------------------------------------------
+
+const BOOTSTRAP_DEBUG =
+  process.env.NODE_ENV === "development" && typeof window !== "undefined";
+
+function logBootstrap(step: string, detail?: string) {
+  if (BOOTSTRAP_DEBUG) {
+    console.log(`[bootstrap] ${step}${detail ? `: ${detail}` : ""}`);
+  }
+}
+
+function describeFirestoreErrorCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    return String((error as { code: unknown }).code);
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function ensureUserProfile(
   db: Firestore,
   user: User,
 ): Promise<UserProfile> {
   const profileRef = doc(db, "users", user.uid);
-  const snapshot = await getDoc(profileRef);
-
   const now = new Date().toISOString();
   const fallbackName = user.email?.split("@")[0] ?? "Choir Director";
+
+  logBootstrap("reading user profile", `users/${user.uid}`);
+  const snapshot = await getDoc(profileRef);
+  logBootstrap("user profile read succeeded", snapshot.exists() ? "exists" : "does not exist");
 
   if (!snapshot.exists()) {
     const profile: UserProfile = {
@@ -77,7 +100,9 @@ async function ensureUserProfile(
 
     // Fixed document id (uid) makes concurrent creation idempotent: two tabs
     // racing simply write the same document with equivalent content.
+    logBootstrap("creating user profile");
     await setDoc(profileRef, profile);
+    logBootstrap("user profile created");
     return profile;
   }
 
@@ -96,7 +121,9 @@ async function ensureUserProfile(
       updatedAt: now,
     };
 
+    logBootstrap("syncing user profile from auth provider");
     await setDoc(profileRef, updated);
+    logBootstrap("user profile synced");
     return updated;
   }
 
@@ -126,17 +153,24 @@ async function ensureDefaultWorkspace(
   const workspaceRef = doc(db, "workspaces", workspaceId);
   const profileRef = doc(db, "users", user.uid);
 
+  logBootstrap("reading default workspace", `workspaces/${workspaceId}`);
   const workspaceSnapshot = await getDoc(workspaceRef);
+  logBootstrap(
+    "default workspace read succeeded",
+    workspaceSnapshot.exists() ? "exists" : "does not exist",
+  );
 
   if (workspaceSnapshot.exists()) {
     // Ensure the profile points at it (self-heals a profile whose pointer is
     // missing or stale, e.g. after rules rejected an earlier bootstrap).
     if (!profile.defaultWorkspaceId) {
+      logBootstrap("linking profile to existing default workspace");
       await setDoc(
         profileRef,
         { defaultWorkspaceId: workspaceId, updatedAt: now },
         { merge: true },
       );
+      logBootstrap("profile linked");
     }
     return workspaceId;
   }
@@ -154,6 +188,10 @@ async function ensureDefaultWorkspace(
     updatedAt: now,
   };
 
+  logBootstrap(
+    "creating default workspace batch",
+    `workspaces/${workspaceId} + members/${user.uid} + profile link`,
+  );
   const batch = writeBatch(db);
   batch.set(workspaceRef, {
     id: workspaceId,
@@ -170,6 +208,7 @@ async function ensureDefaultWorkspace(
   );
 
   await batch.commit();
+  logBootstrap("default workspace batch committed");
 
   return workspaceId;
 }
@@ -178,14 +217,22 @@ async function ensureDefaultWorkspace(
  * Idempotent post-authentication bootstrap: ensures the user profile doc and
  * exactly one default workspace (+ owner membership) exist. Safe to call on
  * every sign-in — subsequent logins will not create duplicates.
+ *
+ * Each Firestore operation below is individually logged (dev builds only) so
+ * a first-login rules failure pinpoints the exact failing operation instead
+ * of surfacing as one generic error.
  */
 export async function bootstrapUserWorkspace(user: User): Promise<AuthResult> {
   const db = await getFirebaseFirestore();
+  logBootstrap("starting", user.uid);
   const profile = await ensureUserProfile(db, user);
   const workspaceId = await ensureDefaultWorkspace(db, user, profile);
+  logBootstrap("complete", `workspaceId=${workspaceId}`);
 
   return { user, profile, workspaceId };
 }
+
+export { describeFirestoreErrorCode };
 
 export async function signInWithGoogle(): Promise<User> {
   const auth = await getFirebaseAuth();
