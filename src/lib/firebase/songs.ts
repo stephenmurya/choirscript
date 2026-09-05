@@ -5,15 +5,20 @@ import {
   collection,
   query,
   orderBy,
+  setDoc,
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
 import { createId } from "@/lib/songStorage";
 import type { Song } from "@/lib/songTypes";
+import { normalizeSong } from "@/lib/songStorage";
+import { buildSongCardSummary } from "@/lib/songSummary";
 import { getFirebaseFirestore } from "./client";
 import {
   metaFromSong,
   toSongMeta,
+  type ContributorInfo,
+  type SongCardSummary,
   type SongDocument,
   type SongMeta,
 } from "./types";
@@ -50,6 +55,61 @@ function describeFirestoreError(error: unknown): Error {
   return error instanceof Error ? error : new Error("Cloud storage request failed.");
 }
 
+const CARD_SUMMARY_VERSION = 1;
+
+function parseCardSummary(value: unknown): SongCardSummary | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = value as Partial<SongCardSummary>;
+
+  if (candidate.version !== CARD_SUMMARY_VERSION) {
+    return undefined;
+  }
+
+  const modules = Array.isArray(candidate.modules)
+    ? candidate.modules.filter(
+        (key): key is SongCardSummary["modules"][number] => typeof key === "string",
+      )
+    : [];
+
+  const previewRaw =
+    candidate.contributors && Array.isArray(candidate.contributors.preview)
+      ? candidate.contributors.preview
+      : [];
+  const preview = previewRaw
+    .filter(
+      (item): item is NonNullable<SongCardSummary["contributors"]["preview"][number]> =>
+        Boolean(item) &&
+        typeof item === "object" &&
+        typeof (item as { uid?: unknown }).uid === "string",
+    )
+    .map((item) => ({
+      uid: item.uid,
+      displayName:
+        typeof (item as { displayName?: unknown }).displayName === "string"
+          ? (item as { displayName: string }).displayName
+          : "",
+      photoURL:
+        typeof (item as { photoURL?: unknown }).photoURL === "string"
+          ? (item as { photoURL: string }).photoURL
+          : undefined,
+    }));
+
+  return {
+    version: CARD_SUMMARY_VERSION,
+    modules,
+    contributors: {
+      total:
+        candidate.contributors && typeof candidate.contributors.total === "number"
+          ? candidate.contributors.total
+          : preview.length,
+      preview,
+    },
+  };
+}
+
 function parseMeta(id: string, data: Record<string, unknown>): SongMeta | null {
   if (typeof data.title !== "string") {
     return null;
@@ -67,6 +127,7 @@ function parseMeta(id: string, data: Record<string, unknown>): SongMeta | null {
     createdBy: typeof data.createdBy === "string" ? data.createdBy : "",
     updatedBy: typeof data.updatedBy === "string" ? data.updatedBy : "",
     schemaVersion: 1,
+    cardSummary: parseCardSummary(data.cardSummary),
   };
 }
 
@@ -157,7 +218,7 @@ export async function createSong(
   workspaceId: string,
   song: Song,
   uid: string,
-  options: { checkCollision?: boolean } = {},
+  options: { checkCollision?: boolean; contributor?: ContributorInfo } = {},
 ): Promise<SongMeta> {
   try {
     const db = await getFirebaseFirestore();
@@ -169,7 +230,7 @@ export async function createSong(
       }
     }
 
-    const meta = toSongMeta(song, uid);
+    const meta = toSongMeta(song, uid, options.contributor);
     const document: SongDocument = {
       schemaVersion: 1,
       song,
@@ -194,10 +255,11 @@ export async function saveSong(
   song: Song,
   uid: string,
   existingMeta?: SongMeta | null,
+  contributor?: ContributorInfo,
 ): Promise<SongMeta> {
   try {
     const db = await getFirebaseFirestore();
-    const meta = metaFromSong(song, existingMeta ?? null, uid);
+    const meta = metaFromSong(song, existingMeta ?? null, uid, contributor);
     const document: SongDocument = {
       schemaVersion: 1,
       song,
@@ -258,4 +320,69 @@ export async function deleteSong(workspaceId: string, songId: string): Promise<v
   } catch (error) {
     throw describeFirestoreError(error);
   }
+}
+
+/**
+ * One-time, versioned backfill of card summaries for song metadata that lacks
+ * a current-version summary (e.g. songs created before Phase 2.3).
+ *
+ * Read/write behavior per outdated song: 1 read of document/current, 1 write
+ * of the metadata document. Songs already carrying cardSummary.version === 1
+ * are skipped with ZERO reads — normal workspace loads never re-read bodies.
+ *
+ * Concurrency: per-song in-session dedupe so parallel callers (multiple cards
+ * mounting, repeated reloads) share one backfill promise per song. A failed
+ * backfill leaves the original metadata and body intact and will simply retry
+ * on a future session, since detection is "summary missing/outdated".
+ */
+const backfillInFlight = new Map<string, Promise<SongMeta | null>>();
+
+export function needsSummaryBackfill(meta: SongMeta): boolean {
+  return !meta.cardSummary || meta.cardSummary.version !== CARD_SUMMARY_VERSION;
+}
+
+export function backfillSongCardSummary(
+  workspaceId: string,
+  meta: SongMeta,
+  contributor: ContributorInfo,
+): Promise<SongMeta | null> {
+  const key = `${workspaceId}:${meta.id}`;
+
+  const existing = backfillInFlight.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const run = (async () => {
+    try {
+      const db = await getFirebaseFirestore();
+      const documentSnapshot = await getDoc(documentRef(db, workspaceId, meta.id));
+
+      if (!documentSnapshot.exists()) {
+        // Body missing (e.g. interrupted create): leave metadata untouched.
+        return meta;
+      }
+
+      const song = normalizeSong(parseDocument(documentSnapshot.data(), meta));
+      const summary = buildSongCardSummary(song, contributor);
+
+      await setDoc(
+        songDocRef(db, workspaceId, meta.id),
+        { cardSummary: summary },
+        { merge: true },
+      );
+
+      return { ...meta, cardSummary: summary };
+    } catch (error) {
+      // Non-fatal: the card simply renders without module icons until a
+      // later session retries (detection is summary-missing).
+      console.error(`Could not backfill card summary for song ${meta.id}`, error);
+      return meta;
+    } finally {
+      backfillInFlight.delete(key);
+    }
+  })();
+
+  backfillInFlight.set(key, run);
+  return run;
 }

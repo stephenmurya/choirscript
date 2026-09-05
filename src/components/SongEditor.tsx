@@ -147,7 +147,11 @@ export function SongEditor({ songId }: SongEditorProps) {
 
     const timeoutId = window.setTimeout(() => {
       setSaveState("saving");
-      saveCloudSong(activeWorkspaceId, song, uid, songMeta)
+      saveCloudSong(activeWorkspaceId, song, uid, songMeta, {
+        uid,
+        displayName: user?.displayName ?? "",
+        photoURL: user?.photoURL ?? undefined,
+      })
         .then((meta) => {
           setSongMeta(meta);
           // Only show "Saved" if nothing was edited while saving.
@@ -161,7 +165,7 @@ export function SongEditor({ songId }: SongEditorProps) {
     }, AUTOSAVE_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [song, saveState, activeWorkspaceId, uid, songMeta]);
+  }, [song, saveState, activeWorkspaceId, uid, songMeta, user?.displayName, user?.photoURL]);
 
   function updateSong(updater: (current: Song) => Song) {
     setSong((current) => {
@@ -183,7 +187,11 @@ export function SongEditor({ songId }: SongEditorProps) {
     }
 
     setSaveState("saving");
-    saveCloudSong(workspaceContext.workspaceId, song, workspaceContext.uid, songMeta)
+    saveCloudSong(workspaceContext.workspaceId, song, workspaceContext.uid, songMeta, {
+      uid: workspaceContext.uid,
+      displayName: user?.displayName ?? "",
+      photoURL: user?.photoURL ?? undefined,
+    })
       .then((meta) => {
         setSongMeta(meta);
         setSaveState("saved");

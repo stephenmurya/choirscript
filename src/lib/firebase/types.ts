@@ -1,6 +1,44 @@
 import type { Song } from "@/lib/songTypes";
+import { buildSongCardSummary } from "@/lib/songSummary";
 
 export type WorkspaceRole = "owner" | "admin" | "editor" | "viewer";
+
+/**
+ * Project-module vocabulary for card summaries. Presence-based: a key is
+ * listed only when that module currently contains content in the project.
+ * Future modules (arrangement, band, production) extend this list via their
+ * save-path derivations — see src/lib/songSummary.ts.
+ */
+export type SongModuleKey =
+  | "lyrics"
+  | "vocalParts"
+  | "arrangement"
+  | "band"
+  | "production";
+
+export type SongContributorPreview = {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+};
+
+/**
+ * Lightweight summary living on the song METADATA document, built so
+ * workspace cards render without document/current.
+ *
+ * - modules: presence-based (see deriveSongModulePresence)
+ * - contributors: denormalized for cheap card rendering; preview shows at
+ *   most 3 avatars, total may exceed it. Collaboration-ready without any
+ *   collaboration logic existing yet.
+ */
+export type SongCardSummary = {
+  version: 1;
+  modules: SongModuleKey[];
+  contributors: {
+    total: number;
+    preview: SongContributorPreview[];
+  };
+};
 
 export type UserProfile = {
   uid: string;
@@ -46,6 +84,7 @@ export type SongMeta = {
   createdBy: string;
   updatedBy: string;
   schemaVersion: 1;
+  cardSummary?: SongCardSummary;
 };
 
 export type SongDocument = {
@@ -55,7 +94,17 @@ export type SongDocument = {
   updatedBy: string;
 };
 
-export function toSongMeta(song: Song, uid: string): SongMeta {
+export type ContributorInfo = {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+};
+
+export function toSongMeta(
+  song: Song,
+  uid: string,
+  contributor?: ContributorInfo,
+): SongMeta {
   return {
     id: song.id,
     title: song.title,
@@ -68,11 +117,29 @@ export function toSongMeta(song: Song, uid: string): SongMeta {
     createdBy: uid,
     updatedBy: uid,
     schemaVersion: 1,
+    cardSummary: buildSongCardSummary(
+      song,
+      contributor ?? { uid, displayName: "", photoURL: undefined },
+    ),
   };
 }
 
-export function metaFromSong(song: Song, existing?: SongMeta | null, uid = ""): SongMeta {
-  const base = toSongMeta(song, existing?.createdBy || uid);
+export function metaFromSong(
+  song: Song,
+  existing?: SongMeta | null,
+  uid = "",
+  contributor?: ContributorInfo,
+): SongMeta {
+  const previousContributor = existing?.cardSummary?.contributors.preview[0];
+  const resolvedContributor: ContributorInfo =
+    contributor ??
+    ({
+      uid: uid || previousContributor?.uid || "",
+      displayName: previousContributor?.displayName ?? "",
+      photoURL: previousContributor?.photoURL,
+    } satisfies ContributorInfo);
+
+  const base = toSongMeta(song, existing?.createdBy || uid, resolvedContributor);
 
   return {
     ...base,

@@ -11,10 +11,12 @@ import {
 } from "react";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import {
+  backfillSongCardSummary,
   createSong as createCloudSong,
   deleteSong as deleteCloudSong,
   duplicateSong as duplicateCloudSong,
   listSongs,
+  needsSummaryBackfill,
 } from "@/lib/firebase/songs";
 import type { SongMeta } from "@/lib/firebase/types";
 import type { Song } from "@/lib/songTypes";
@@ -55,8 +57,55 @@ export function WorkspaceSongsProvider({ children }: { children: ReactNode }) {
   const [reloadAttempt, setReloadAttempt] = useState(0);
 
   const uid = user?.uid ?? null;
+  const contributor = useMemo(
+    () => ({
+      uid: user?.uid ?? "",
+      displayName: user?.displayName ?? "",
+      photoURL: user?.photoURL ?? undefined,
+    }),
+    [user?.uid, user?.displayName, user?.photoURL],
+  );
 
-  // One-time metadata query per workspace (re-runs on reload()).
+  // One-time metadata query per workspace (re-runs on reload()). Songs whose
+  // metadata lacks a current-version card summary are backfilled in the
+  // background: one document/current read + one metadata write each, once,
+  // deduped per session. Cards render immediately from whatever metadata is
+  // already present.
+  useEffect(() => {
+    if (!workspaceId || !uid) {
+      return;
+    }
+
+    const stale = songs.filter(needsSummaryBackfill);
+
+    if (stale.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    Promise.all(
+      stale.map((meta) => backfillSongCardSummary(workspaceId, meta, contributor)),
+    )
+      .then((updatedMetas) => {
+        if (cancelled) {
+          return;
+        }
+
+        const updatedById = new Map(
+          updatedMetas.filter(Boolean).map((meta) => [meta!.id, meta!]),
+        );
+
+        setSongs((current) =>
+          current.map((song) => updatedById.get(song.id) ?? song),
+        );
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, uid, songs, contributor]);
   useEffect(() => {
     if (!workspaceId) {
       return;
@@ -117,7 +166,7 @@ export function WorkspaceSongsProvider({ children }: { children: ReactNode }) {
       };
 
       try {
-        const meta = await createCloudSong(workspaceId, song, uid);
+        const meta = await createCloudSong(workspaceId, song, uid, { contributor });
         setSongs((current) =>
           sortSongMetas([meta, ...current.filter((item) => item.id !== meta.id)]),
         );
@@ -127,7 +176,7 @@ export function WorkspaceSongsProvider({ children }: { children: ReactNode }) {
         throw createError;
       }
     },
-    [workspaceId, uid],
+    [workspaceId, uid, contributor],
   );
 
   const duplicateSong = useCallback(
