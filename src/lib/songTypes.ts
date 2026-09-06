@@ -149,6 +149,8 @@ export type ArrangementOccurrence = {
   sourceSectionId: string;
   /** Occurrence-local performance note; never mutates Source. */
   note?: string;
+  /** Number of consecutive performances represented by this placement. */
+  repeatCount?: number;
 };
 
 export type Arrangement = {
@@ -166,6 +168,8 @@ export type Song = {
   tempo?: string;
   notes?: string;
   mode: SongMode;
+  /** Whether the optional Bass lane is available in Parts/Rehearsal views. */
+  bassEnabled?: boolean;
   /** Canonical Source material. */
   source: { sections: SourceSection[] };
   arrangements: Arrangement[];

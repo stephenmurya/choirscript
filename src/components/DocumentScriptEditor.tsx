@@ -38,14 +38,16 @@ type MenuPosition = {
 
 type DocumentScriptEditorProps = {
   song: Song;
+  view: "lyrics" | "parts";
   includeBass: boolean;
+  onBassEnabledChange: (enabled: boolean) => void;
   selection: LyricSelection;
   focusedSectionId: string | null;
   onSectionFocusHandled: () => void;
   onMetadataChange: (patch: Partial<Song>) => void;
   onRenameSection: (sectionId: string, name: string) => void;
   onDeleteSection: (sectionId: string) => void;
-  onCreateSectionAfter: (sectionId: string | null) => void;
+  onCreateSectionAfter: (sectionId: string | null, name?: string) => void;
   onAddLine: (sectionId: string, lyricLine: string) => void;
   onGenerateScript: (lyrics: string) => void;
   onModeChange: (mode: SongMode) => void;
@@ -73,6 +75,7 @@ type DocumentScriptEditorProps = {
     part: PartKey,
     value: string,
   ) => void;
+  onDuplicateLine: (sectionId: string, lineId: string) => void;
 };
 
 function metadataLine(song: Song) {
@@ -85,7 +88,9 @@ function metadataLine(song: Song) {
 
 export function DocumentScriptEditor({
   song,
+  view,
   includeBass,
+  onBassEnabledChange,
   selection,
   focusedSectionId,
   onSectionFocusHandled,
@@ -109,6 +114,7 @@ export function DocumentScriptEditor({
   onRemoveTechnique,
   onUpdateWordSyllables,
   onPartCueChange,
+  onDuplicateLine,
 }: DocumentScriptEditorProps) {
   const [techniqueMenuPosition, setTechniqueMenuPosition] = useState<MenuPosition | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -224,8 +230,8 @@ export function DocumentScriptEditor({
   }, [onClearSelection, selection, techniqueMenuPosition]);
 
   return (
-    <section className="mx-auto w-full max-w-[1100px] overflow-x-hidden px-3 py-4 sm:px-5 sm:py-6 lg:px-8">
-      <div className="w-full rounded-[2rem] border border-border bg-card/70 px-3 py-5 shadow-2xl shadow-background/20 sm:px-7 sm:py-7 lg:px-10">
+    <section className="mx-auto w-full max-w-[1100px] overflow-x-hidden px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+      <div className="w-full">
         <div className="mb-8 sm:mb-10">
           <input
             aria-label="Song title"
@@ -240,8 +246,8 @@ export function DocumentScriptEditor({
           />
           <div className="mt-2 text-sm text-muted-foreground">{metadataLine(song)}</div>
           <div className="no-print mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <ModeToggle mode={song.mode} onModeChange={onModeChange} />
-            {song.mode === "advanced" ? (
+            {view === "parts" ? <div className="flex flex-wrap items-center gap-3"><ModeToggle mode={song.mode} onModeChange={onModeChange} /><label className="inline-flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={includeBass} onChange={(event) => onBassEnabledChange(event.target.checked)} className="accent-primary" />Bass lane</label></div> : null}
+            {view === "parts" && song.mode === "advanced" ? (
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <TimingScopeSelector
                   scope={timingScope}
@@ -308,7 +314,7 @@ export function DocumentScriptEditor({
           </details>
         </div>
 
-        {song.mode === "advanced" ? (
+        {view === "parts" && song.mode === "advanced" ? (
           <Card className="no-print mb-8 border-border bg-muted/20">
             <CardHeader>
               <div>
@@ -367,7 +373,7 @@ export function DocumentScriptEditor({
                 </button>
               </div>
               {section.lines.map((line, lineIndex) => {
-                if (song.mode === "advanced") {
+                if (view === "parts" && song.mode === "advanced") {
                   const lineTiming = song.timingByLine[line.id];
 
                   return lineTiming ? (
@@ -385,6 +391,7 @@ export function DocumentScriptEditor({
                       }
                       onPartCueChange={onPartCueChange}
                       onRemoveTechnique={onRemoveTechnique}
+                      onDuplicateLine={(lineId) => onDuplicateLine(section.id, lineId)}
                     />
                   ) : null;
                 }
@@ -396,6 +403,7 @@ export function DocumentScriptEditor({
                     line={line}
                     lineIndex={lineIndex}
                     includeBass={includeBass}
+                    showParts={view === "parts"}
                     selection={selection}
                     onSelectionChange={(nextSelection, menuPosition) => {
                       onSelectionChange(nextSelection);
@@ -406,14 +414,16 @@ export function DocumentScriptEditor({
                     onUpdateWordSyllables={onUpdateWordSyllables}
                     onPartCueChange={onPartCueChange}
                     onRemoveTechnique={onRemoveTechnique}
+                    onDuplicateLine={(lineId) => onDuplicateLine(section.id, lineId)}
                   />
                 );
               })}
-              {song.mode === "advanced" ? <Separator className="my-6" /> : null}
+              {view === "parts" && song.mode === "advanced" ? <Separator className="my-6" /> : null}
               <div className="ml-0 mt-5 sm:ml-9">
                 <SlashCommandLine
                   onCreateLine={(lyrics) => onAddLine(section.id, lyrics)}
-                  onCreateSection={() => onCreateSectionAfter(section.id)}
+                  onCreateSection={(name) => onCreateSectionAfter(section.id, name)}
+                  onDuplicateLine={selection?.sectionId === section.id ? () => onDuplicateLine(section.id, selection.lineId) : undefined}
                 />
               </div>
             </section>
@@ -421,7 +431,7 @@ export function DocumentScriptEditor({
 
           {song.source.sections.length === 0 ? (
             <div data-empty-song-focus="true" data-empty-song-surface="true">
-              <SlashCommandLine onCreateSection={() => onCreateSectionAfter(null)} />
+              <SlashCommandLine onCreateLine={onGenerateScript} onCreateSection={(name) => onCreateSectionAfter(null, name)} />
               <p className="mt-2 px-1 text-xs text-muted-foreground">
                 Type your first lyric line and press Enter, or press / for options.
               </p>
@@ -429,7 +439,6 @@ export function DocumentScriptEditor({
           ) : null}
         </div>
       </div>
-
       <TechniqueContextMenu
         position={techniqueMenuPosition}
         onApplyTechnique={(techniqueId) => {

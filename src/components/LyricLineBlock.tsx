@@ -14,6 +14,8 @@ import { splitManualSyllables } from "@/lib/syllableSplitter";
 import type { LyricSelection, PartKey, SongLine, WordToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { VoicePartLanes } from "./VoicePartLanes";
+import { Copy } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type MenuPosition = {
   x: number;
@@ -25,6 +27,7 @@ type LyricLineBlockProps = {
   line: SongLine;
   lineIndex: number;
   includeBass: boolean;
+  showParts?: boolean;
   selection: LyricSelection;
   onSelectionChange: (selection: NonNullable<LyricSelection>, menuPosition?: MenuPosition) => void;
   onUpdateWordSyllables: (
@@ -41,6 +44,7 @@ type LyricLineBlockProps = {
     value: string,
   ) => void;
   onRemoveTechnique: (lineId: string, syllableIds: string[], techniqueId: string) => void;
+  onDuplicateLine?: (lineId: string) => void;
 };
 
 type EditingWord = {
@@ -53,11 +57,13 @@ export function LyricLineBlock({
   line,
   lineIndex,
   includeBass,
+  showParts = true,
   selection,
   onSelectionChange,
   onUpdateWordSyllables,
   onPartCueChange,
   onRemoveTechnique,
+  onDuplicateLine,
 }: LyricLineBlockProps) {
   const [editingWord, setEditingWord] = useState<EditingWord | null>(null);
   const dragStartIdRef = useRef<string | null>(null);
@@ -96,7 +102,8 @@ export function LyricLineBlock({
   }
 
   return (
-    <article data-line-block="true" className="line-block group/line w-full overflow-hidden py-5">
+    <article data-line-block="true" className="line-block group/line relative w-full overflow-hidden py-5">
+      {onDuplicateLine ? <Button type="button" variant="ghost" size="icon-xs" className="no-print absolute right-0 top-3 opacity-0 transition group-hover/line:opacity-100 focus:opacity-100" onClick={() => onDuplicateLine(line.id)} aria-label="Duplicate line"><Copy /></Button> : null}
       <div
         data-line-scroll="true"
         className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
@@ -210,16 +217,16 @@ export function LyricLineBlock({
             );
           })}
 
-          <VoicePartLanes
-            line={line}
-            lineIndex={lineIndex}
-            syllables={flatSyllables}
-            includeBass={includeBass}
-            gridStartRow={voiceStartRow}
-            onPartCueChange={(syllableId, part, value) =>
-              onPartCueChange(sectionId, line.id, syllableId, part, value)
-            }
-          />
+          {showParts ? <VoicePartLanes
+              line={line}
+              lineIndex={lineIndex}
+              syllables={flatSyllables}
+              includeBass={includeBass}
+              gridStartRow={voiceStartRow}
+              onPartCueChange={(syllableId, part, value) =>
+                onPartCueChange(sectionId, line.id, syllableId, part, value)
+              }
+            /> : null}
         </div>
       </div>
 

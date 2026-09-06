@@ -10,23 +10,23 @@ import {
   createEmptySection,
   createDefaultArrangement,
   createLineFromText,
+  duplicateLine,
   createSyllableToken,
   normalizeSong,
 } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
+import { parseLyricsInput } from "@/lib/lyricsParser";
 import {
   appendOccurrence,
   countOccurrencesForSection,
   deleteSourceSectionWithOccurrences,
   moveOccurrence,
+  reorderOccurrence,
   removeOccurrence,
+  setOccurrenceRepeatCount,
   setOccurrenceNote,
 } from "@/lib/arrangement";
-import {
-  getSongWithMeta,
-  saveSong as saveCloudSong,
-  type WorkspaceContext,
-} from "@/lib/firebase/songs";
+import { getSongWithMeta, saveSong as saveCloudSong, type WorkspaceContext } from "@/lib/firebase/songs";
 import type { SongMeta } from "@/lib/firebase/types";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import {
@@ -46,7 +46,6 @@ import type {
   VocalPart,
 } from "@/lib/songTypes";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -57,6 +56,7 @@ import {
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
 import { EditorShell } from "./EditorShell";
 import { ArrangementEditor } from "./ArrangementEditor";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 type SongEditorProps = {
   songId: string;
@@ -78,10 +78,11 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [focusedSectionId, setFocusedSectionId] = useState<string | null>(null);
   const [lyricSelection, setLyricSelection] = useState<LyricSelection>(null);
   const [includeBass, setIncludeBass] = useState(false);
+  const [pendingDeleteSectionId, setPendingDeleteSectionId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
-  const editorView = searchParams.get("view") === "arrangement" ? "arrangement" : "source";
+  const editorView = searchParams.get("view") === "parts" || searchParams.get("view") === "arrangement" ? "parts" : "lyrics";
 
   const uid = user?.uid ?? null;
   const activeWorkspaceId = workspaceId;
@@ -127,7 +128,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         const normalizedSong = normalizeSong(result.song);
         setSong(normalizedSong);
         setSongMeta(result.meta);
-        setIncludeBass(songHasBass(normalizedSong));
+        setIncludeBass(normalizedSong.bassEnabled ?? songHasBass(normalizedSong));
         setActiveSectionId(normalizedSong.source.sections[0]?.id ?? null);
         hasLoaded.current = true;
         setSaveState("saved");
@@ -150,7 +151,7 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   // Debounced autosave (700ms) through the cloud repository. The in-memory
   // song is never reset on failure — the editor state is preserved and the
-  // user can retry via "Save now".
+  // A failed save preserves the current in-memory document for the next autosave attempt.
   useEffect(() => {
     if (!song || !uid || !activeWorkspaceId || !hasLoaded.current) {
       return;
@@ -221,6 +222,8 @@ export function SongEditor({ songId }: SongEditorProps) {
         );
       });
   }
+
+  void handleSaveNow;
 
   function handleMetadataChange(patch: Partial<Song>) {
     updateSong((current) => ({ ...current, ...patch }));
@@ -296,21 +299,16 @@ export function SongEditor({ songId }: SongEditorProps) {
       return;
     }
 
-    const usageCount = countOccurrencesForSection(song, sectionId);
-    const message = usageCount > 0
-      ? `${section.name} is used ${usageCount} time${usageCount === 1 ? "" : "s"} in the current arrangement. Deleting the Source section will also remove those occurrence${usageCount === 1 ? "" : "s"}. Continue?`
-      : `Delete the Source section ${section.name}? This cannot be undone.`;
+    setPendingDeleteSectionId(section.id);
+  }
 
-    if (!window.confirm(message)) {
-      return;
-    }
-
-    const remainingSectionId = song.source.sections.find(
-      (candidate) => candidate.id !== sectionId,
-    )?.id ?? null;
-    updateSong((current) => deleteSourceSectionWithOccurrences(current, sectionId));
-    setActiveSectionId((current) => (current === sectionId ? remainingSectionId : current));
+  function confirmDeleteSection() {
+    if (!song || !pendingDeleteSectionId) return;
+    const remainingSectionId = song.source.sections.find((candidate) => candidate.id !== pendingDeleteSectionId)?.id ?? null;
+    updateSong((current) => deleteSourceSectionWithOccurrences(current, pendingDeleteSectionId));
+    setActiveSectionId((current) => (current === pendingDeleteSectionId ? remainingSectionId : current));
     setFocusedSectionId(null);
+    setPendingDeleteSectionId(null);
   }
 
   function handleAddOccurrence(sourceSectionId: string) {
@@ -325,6 +323,14 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => moveOccurrence(current, occurrenceId, direction));
   }
 
+  function handleReorderOccurrence(occurrenceId: string, overOccurrenceId: string) {
+    updateSong((current) => reorderOccurrence(current, occurrenceId, overOccurrenceId));
+  }
+
+  function handleSetOccurrenceRepeatCount(occurrenceId: string, repeatCount: number) {
+    updateSong((current) => setOccurrenceRepeatCount(current, occurrenceId, repeatCount));
+  }
+
   function handleSetOccurrenceNote(occurrenceId: string, note: string) {
     updateSong((current) => setOccurrenceNote(current, occurrenceId, note));
   }
@@ -332,11 +338,11 @@ export function SongEditor({ songId }: SongEditorProps) {
   function handleEditSource(sourceSectionId: string) {
     setActiveSectionId(sourceSectionId);
     setFocusedSectionId(sourceSectionId);
-    router.push(`/songs/${songId}?view=source`);
+    router.push(`/songs/${songId}?view=lyrics#source-${sourceSectionId}`);
   }
 
-  function handleCreateSectionAfter(sectionId: string | null) {
-    const section = createEmptySection("New Section");
+  function handleCreateSectionAfter(sectionId: string | null, name = "New Section") {
+    const section = createEmptySection(name);
 
     updateSong((current) => {
       const insertSections = (sections: typeof current.source.sections) => {
@@ -369,7 +375,7 @@ export function SongEditor({ songId }: SongEditorProps) {
                 ...arrangement,
                 occurrences: [
                   ...arrangement.occurrences,
-                  { id: createId("occ"), sourceSectionId: section.id },
+                  { id: createId("occ"), sourceSectionId: section.id, repeatCount: 1 },
                 ],
               }
             : arrangement,
@@ -383,7 +389,13 @@ export function SongEditor({ songId }: SongEditorProps) {
   }
 
   function handleAddLine(sectionId: string, lyricLine: string) {
-    const line = createLineFromText(lyricLine);
+    const parsed = parseLyricsInput(lyricLine);
+    if (parsed.sections.length === 0) return;
+    if (parsed.sections.length > 1 || parsed.sections.some((section) => section.heading)) {
+      handleGenerateScript(lyricLine);
+      return;
+    }
+    const lines = parsed.sections[0].lines.map(createLineFromText);
 
     updateSong((current) => {
       const nextSong = {
@@ -391,7 +403,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         source: {
           sections: current.source.sections.map((section) =>
             section.id === sectionId
-              ? { ...section, lines: [...section.lines, line] }
+              ? { ...section, lines: [...section.lines, ...lines] }
               : section,
           ),
         },
@@ -403,15 +415,34 @@ export function SongEditor({ songId }: SongEditorProps) {
   }
 
   function handleGenerateScript(lyrics: string) {
-    const lines = lyrics
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map(createLineFromText);
-
-    if (lines.length === 0) {
+    const parsed = parseLyricsInput(lyrics);
+    if (parsed.sections.length === 0) {
       return;
     }
+
+    const hasHeadings = parsed.sections.length > 1 || parsed.sections.some((section) => section.heading);
+    if (hasHeadings) {
+      const newSections = parsed.sections.map((parsedSection, index) => {
+        const section = createEmptySection(parsedSection.heading ?? `Section ${index + 1}`);
+        section.lines = parsedSection.lines.map(createLineFromText);
+        return section;
+      });
+      updateSong((current) => {
+        const afterId = activeSectionId;
+        const afterIndex = afterId ? current.source.sections.findIndex((section) => section.id === afterId) : -1;
+        const sourceSections = [...current.source.sections];
+        sourceSections.splice(afterIndex + 1, 0, ...newSections);
+        return {
+          ...current,
+          source: { sections: sourceSections },
+          arrangements: current.arrangements.map((arrangement) => arrangement.id === current.activeArrangementId ? { ...arrangement, occurrences: [...arrangement.occurrences, ...newSections.map((section) => ({ id: createId("occ"), sourceSectionId: section.id, repeatCount: 1 }))] } : arrangement),
+        };
+      });
+      setActiveSectionId(newSections[0].id);
+      return;
+    }
+
+    const lines = parsed.sections[0].lines.map(createLineFromText);
 
     updateSong((current) => {
       if (current.source.sections.length === 0) {
@@ -443,6 +474,15 @@ export function SongEditor({ songId }: SongEditorProps) {
 
       return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
     });
+  }
+
+  function handleDuplicateLine(sectionId: string, lineId: string) {
+    updateSong((current) => duplicateLine(current, sectionId, lineId));
+  }
+
+  function handleBassEnabledChange(enabled: boolean) {
+    setIncludeBass(enabled);
+    updateSong((current) => ({ ...current, bassEnabled: enabled }));
   }
 
   function handleApplyTechnique(techniqueId: string) {
@@ -631,26 +671,22 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   return shell(
     <div>
-      <div className="mx-auto flex max-w-[1100px] items-center justify-end gap-2 px-3 pb-1 pt-4 sm:px-5 lg:px-8">
-        <Badge variant="secondary" className="gap-1">
-          {saveStatus}
-        </Badge>
-        <Button type="button" variant="outline" size="sm" onClick={handleSaveNow}>
-          Save now
-        </Button>
-      </div>
-      {editorView === "arrangement" ? (
-        <ArrangementEditor
+      <div className={editorView === "parts" ? "mx-auto grid max-w-[1400px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:px-8" : "pb-10"}>
+      {editorView === "parts" ? <ArrangementEditor
           song={song}
           onAddOccurrence={handleAddOccurrence}
           onRemoveOccurrence={handleRemoveOccurrence}
           onMoveOccurrence={handleMoveOccurrence}
+          onReorderOccurrence={handleReorderOccurrence}
           onSetOccurrenceNote={handleSetOccurrenceNote}
+          onSetOccurrenceRepeatCount={handleSetOccurrenceRepeatCount}
           onEditSource={handleEditSource}
-        />
-      ) : <DocumentScriptEditor
+        /> : null}
+      <DocumentScriptEditor
       song={song}
+      view={editorView}
       includeBass={includeBass}
+      onBassEnabledChange={handleBassEnabledChange}
       selection={lyricSelection}
       focusedSectionId={focusedSectionId}
       onSectionFocusHandled={() => setFocusedSectionId(null)}
@@ -677,7 +713,22 @@ export function SongEditor({ songId }: SongEditorProps) {
       onRemoveTechnique={handleRemoveTechnique}
       onUpdateWordSyllables={handleUpdateWordSyllables}
       onPartCueChange={handlePartCueChange}
-      />}
+      onDuplicateLine={handleDuplicateLine}
+      />
+      </div>
+      {(() => {
+        const pendingSection = pendingDeleteSectionId ? song.source.sections.find((section) => section.id === pendingDeleteSectionId) : null;
+        const usageCount = pendingSection ? countOccurrencesForSection(song, pendingSection.id) : 0;
+        return <ConfirmDialog
+          open={Boolean(pendingSection)}
+          onOpenChange={(open) => { if (!open) setPendingDeleteSectionId(null); }}
+          title={`Delete ${pendingSection?.name ?? "Source section"}?`}
+          description={pendingSection && usageCount > 0 ? `${pendingSection.name} is used ${usageCount} time${usageCount === 1 ? "" : "s"} in the current arrangement. Deleting this Source section will also remove those placements and its timing data.` : "This removes the Source section. The action cannot be undone."}
+          confirmLabel="Delete section"
+          destructive
+          onConfirm={confirmDeleteSection}
+        />;
+      })()}
     </div>,
   );
 }

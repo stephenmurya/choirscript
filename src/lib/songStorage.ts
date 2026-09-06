@@ -1,7 +1,7 @@
 import { DEFAULT_TECHNIQUES } from "./defaultTechniques";
 import { splitWordIntoSyllables } from "./syllableSplitter";
 import { DEFAULT_TIMING_SETTINGS, ensureTimingForSong, migrateSongTiming } from "./timing";
-import { migrateSongToSourceArrangement } from "./arrangement";
+import { migrateSongToSourceArrangement, normalizeRepeatCount } from "./arrangement";
 import type {
   Arrangement,
   Song,
@@ -70,6 +70,7 @@ export function createDefaultArrangement(sections: SourceSection[]): Arrangement
     occurrences: sections.map((section) => ({
       id: createId("occ"),
       sourceSectionId: section.id,
+      repeatCount: 1,
     })),
   };
 }
@@ -86,6 +87,7 @@ export function createEmptySong(): Song {
     tempo: "",
     notes: "",
     mode: "simple",
+    bassEnabled: false,
     source: { sections: [] },
     arrangements: [arrangement],
     activeArrangementId: arrangement.id,
@@ -206,6 +208,7 @@ export function createSampleSong(): Song {
     tempo: "Slow 72 BPM",
     notes: "Teach the melody by call-and-response, then add harmony cues one line at a time.",
     mode: "simple",
+    bassEnabled: false,
     source: { sections: [section] },
     arrangements: [arrangement],
     activeArrangementId: arrangement.id,
@@ -317,6 +320,14 @@ export function normalizeSong(input: Song): Song {
     },
   });
 
+  const sourceHasBass = normalizedSong.source.sections.some((section) =>
+    section.lines.some((line) =>
+      line.words.some((word) =>
+        word.syllables.some((syllable) => Boolean(syllable.bass?.trim())),
+      ),
+    ),
+  );
+
   // Arrangement sanitation: drop occurrences whose sourceSectionId no longer
   // resolves (never keep silent danglers), and repair a broken
   // activeArrangementId. Also normalize any arrangement object IDs.
@@ -335,6 +346,7 @@ export function normalizeSong(input: Song): Song {
           ...occ,
           id: occ.id || createId("occ"),
           note: occ.note?.trim() ? occ.note.trim() : undefined,
+          repeatCount: normalizeRepeatCount(occ.repeatCount),
         })),
     }));
 
@@ -347,6 +359,7 @@ export function normalizeSong(input: Song): Song {
           occurrences: normalizedSong.source.sections.map((section) => ({
             id: createId("occ"),
             sourceSectionId: section.id,
+            repeatCount: 1,
           })),
         },
       ];
@@ -359,6 +372,10 @@ export function normalizeSong(input: Song): Song {
 
   const withArrangements: Song = {
     ...normalizedSong,
+    bassEnabled:
+      typeof normalizedSong.bassEnabled === "boolean"
+        ? normalizedSong.bassEnabled
+        : sourceHasBass,
     arrangements,
     activeArrangementId,
   };
@@ -417,6 +434,107 @@ export function getSongById(id: string) {
 
 export function deleteSong(id: string) {
   saveSongs(loadSongs().filter((song) => song.id !== id));
+}
+
+/**
+ * Duplicate one canonical line in place. Every nested content and timing ID
+ * is regenerated so later edits to either line remain independent.
+ */
+export function duplicateLine(song: Song, sectionId: string, lineId: string): Song {
+  const normalizedSong = normalizeSong(song);
+  const section = normalizedSong.source.sections.find((candidate) => candidate.id === sectionId);
+  const line = section?.lines.find((candidate) => candidate.id === lineId);
+  if (!section || !line) {
+    return normalizedSong;
+  }
+
+  const syllableIdMap = new Map<string, string>();
+  const barIdMap = new Map<string, string>();
+  const nextLineId = createId("line");
+
+  const duplicatedLine: SongLine = {
+    ...line,
+    id: nextLineId,
+    words: line.words.map((word) => {
+      const nextWordId = createId("word");
+      return {
+        ...word,
+        id: nextWordId,
+        syllables: word.syllables.map((syllable) => {
+          const nextSyllableId = createId("syllable");
+          syllableIdMap.set(syllable.id, nextSyllableId);
+          return {
+            ...syllable,
+            id: nextSyllableId,
+            techniques: syllable.techniques.map((technique) => ({ ...technique })),
+          };
+        }),
+      };
+    }),
+    annotations: line.annotations.map((annotation) => {
+      const nextAnnotationId = createId("annotation");
+      return {
+        ...annotation,
+        id: nextAnnotationId,
+        syllableIds: annotation.syllableIds
+          .map((id) => syllableIdMap.get(id))
+          .filter((id): id is string => Boolean(id)),
+        appliesTo: [...annotation.appliesTo],
+      };
+    }),
+  };
+
+  const originalTiming = normalizedSong.timingByLine[lineId];
+  const timingByLine = { ...normalizedSong.timingByLine };
+  if (originalTiming) {
+    const bars = originalTiming.bars.map((bar) => {
+      const nextBarId = createId("bar");
+      barIdMap.set(bar.id, nextBarId);
+      return { ...bar, id: nextBarId, lineId: nextLineId };
+    });
+    const remapEvent = (event: (typeof originalTiming.sharedEvents)[number]) => {
+      const nextEventId = createId("timingEvent");
+      return {
+        ...event,
+        id: nextEventId,
+        lineId: nextLineId,
+        barId: barIdMap.get(event.barId) ?? event.barId,
+        syllableId: event.syllableId
+          ? syllableIdMap.get(event.syllableId) ?? event.syllableId
+          : undefined,
+      };
+    };
+
+    timingByLine[nextLineId] = {
+      ...originalTiming,
+      lineId: nextLineId,
+      bars,
+      sharedEvents: originalTiming.sharedEvents.map(remapEvent),
+      partOverrides: Object.fromEntries(
+        Object.entries(originalTiming.partOverrides).map(([part, events]) => [
+          part,
+          events?.map(remapEvent),
+        ]),
+      ),
+    };
+  }
+
+  return {
+    ...normalizedSong,
+    source: {
+      sections: normalizedSong.source.sections.map((candidate) =>
+        candidate.id === sectionId
+          ? {
+              ...candidate,
+              lines: candidate.lines.flatMap((candidateLine) =>
+                candidateLine.id === lineId ? [candidateLine, duplicatedLine] : [candidateLine],
+              ),
+            }
+          : candidate,
+      ),
+    },
+    timingByLine,
+  };
 }
 
 export function duplicateSong(song: Song): Song {

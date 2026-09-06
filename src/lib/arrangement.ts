@@ -16,7 +16,19 @@ export type ResolvedSection = {
   occurrenceId: string;
   occurrence: ArrangementOccurrence;
   section: SourceSection;
+  repeatIndex: number;
+  renderIdentity: string;
 };
+
+export const MAX_REPEAT_COUNT = 32;
+
+export function normalizeRepeatCount(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 1;
+  }
+
+  return Math.min(MAX_REPEAT_COUNT, Math.max(1, Math.floor(value)));
+}
 
 /** Get the active arrangement, defensively falling back to the first one. */
 export function getActiveArrangement(song: Song): Arrangement | null {
@@ -42,22 +54,36 @@ export function resolveArrangement(song: Song): ResolvedSection[] {
   const arrangement = getActiveArrangement(song);
 
   const fallbackToSourceOrder = () =>
-    song.source.sections.map((section) => ({
-      occurrenceId: `fallback:${section.id}`,
-      occurrence: { id: `fallback:${section.id}`, sourceSectionId: section.id },
-      section,
-    }));
+    song.source.sections.flatMap((section) => {
+      const occurrenceId = `fallback:${section.id}`;
+      return [{
+        occurrenceId,
+        occurrence: { id: occurrenceId, sourceSectionId: section.id, repeatCount: 1 },
+        section,
+        repeatIndex: 0,
+        renderIdentity: `${occurrenceId}:0`,
+      }];
+    });
 
   if (!arrangement || arrangement.occurrences.length === 0) {
     return fallbackToSourceOrder();
   }
 
-  const resolved = arrangement.occurrences
-    .map((occurrence) => {
+  const resolved = arrangement.occurrences.flatMap((occurrence) => {
       const section = sectionById.get(occurrence.sourceSectionId);
-      return section ? { occurrenceId: occurrence.id, occurrence, section } : null;
-    })
-    .filter((item): item is ResolvedSection => item !== null);
+      if (!section) {
+        return [];
+      }
+
+      const repeatCount = normalizeRepeatCount(occurrence.repeatCount);
+      return Array.from({ length: repeatCount }, (_, repeatIndex) => ({
+        occurrenceId: occurrence.id,
+        occurrence,
+        section,
+        repeatIndex,
+        renderIdentity: `${occurrence.id}:${repeatIndex}`,
+      }));
+    });
 
   return resolved.length > 0 ? resolved : fallbackToSourceOrder();
 }
@@ -69,8 +95,9 @@ export function countOccurrencesForSection(song: Song, sourceSectionId: string):
     return 0;
   }
 
-  return arrangement.occurrences.filter((occ) => occ.sourceSectionId === sourceSectionId)
-    .length;
+  return arrangement.occurrences
+    .filter((occ) => occ.sourceSectionId === sourceSectionId)
+    .reduce((total, occurrence) => total + normalizeRepeatCount(occurrence.repeatCount), 0);
 }
 
 /** Append a Source section to the end of the active arrangement. */
@@ -84,7 +111,7 @@ export function appendOccurrence(song: Song, sourceSectionId: string): Song {
     ...current,
     occurrences: [
       ...current.occurrences,
-      { id: createId("occ"), sourceSectionId },
+      { id: createId("occ"), sourceSectionId, repeatCount: 1 },
     ],
   }));
 }
@@ -129,6 +156,41 @@ export function moveOccurrence(
   return updateArrangement(song, arrangement.id, (current) => ({
     ...current,
     occurrences,
+  }));
+}
+
+/** Move an occurrence to the position represented by a drag-and-drop target. */
+export function reorderOccurrence(song: Song, occurrenceId: string, overOccurrenceId: string): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement || occurrenceId === overOccurrenceId) {
+    return song;
+  }
+
+  const fromIndex = arrangement.occurrences.findIndex((occurrence) => occurrence.id === occurrenceId);
+  const toIndex = arrangement.occurrences.findIndex((occurrence) => occurrence.id === overOccurrenceId);
+  if (fromIndex < 0 || toIndex < 0) {
+    return song;
+  }
+
+  const occurrences = [...arrangement.occurrences];
+  const [moved] = occurrences.splice(fromIndex, 1);
+  occurrences.splice(toIndex, 0, moved);
+  return updateArrangement(song, arrangement.id, (current) => ({ ...current, occurrences }));
+}
+
+export function setOccurrenceRepeatCount(song: Song, occurrenceId: string, repeatCount: number): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement) {
+    return song;
+  }
+
+  return updateArrangement(song, arrangement.id, (current) => ({
+    ...current,
+    occurrences: current.occurrences.map((occurrence) =>
+      occurrence.id === occurrenceId
+        ? { ...occurrence, repeatCount: normalizeRepeatCount(repeatCount) }
+        : occurrence,
+    ),
   }));
 }
 
@@ -214,6 +276,7 @@ export function migrateSongToSourceArrangement(song: Song): Song {
     occurrences: sections.map((section) => ({
       id: createId("occ"),
       sourceSectionId: section.id,
+      repeatCount: 1,
     })),
   };
 
@@ -244,6 +307,9 @@ export function hasMeaningfulArrangement(song: Song): boolean {
     counts.set(occ.sourceSectionId, (counts.get(occ.sourceSectionId) ?? 0) + 1);
   });
   const hasRepeat = [...counts.values()].some((count) => count > 1);
+  const hasExplicitRepeat = arrangement.occurrences.some(
+    (occurrence) => normalizeRepeatCount(occurrence.repeatCount) > 1,
+  );
 
   // Cuts: sections that exist in Source but are never placed.
   const hasCut = song.source.sections.some((section) => !counts.has(section.id));
@@ -259,5 +325,5 @@ export function hasMeaningfulArrangement(song: Song): boolean {
   // Occurrence notes indicate arrangement-specific intent.
   const hasNotes = arrangement.occurrences.some((occ) => Boolean(occ.note));
 
-  return hasRepeat || hasCut || hasNotes || (hasReorder && placedIds.length === sourceIds.length);
+  return hasRepeat || hasExplicitRepeat || hasCut || hasNotes || (hasReorder && placedIds.length === sourceIds.length);
 }

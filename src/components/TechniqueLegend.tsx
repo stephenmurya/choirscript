@@ -7,7 +7,7 @@ type TechniqueLegendProps = {
 
 export function TechniqueLegend({ compact = false }: TechniqueLegendProps) {
   return (
-    <section className="technique-legend rounded-2xl border border-border bg-card p-4">
+    <section className="technique-legend rounded-2xl border border-border bg-muted/20 p-4">
       <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
         Technique Legend
       </h2>
@@ -21,7 +21,7 @@ export function TechniqueLegend({ compact = false }: TechniqueLegendProps) {
         {DEFAULT_TECHNIQUES.map((technique) => (
           <div
             key={technique.id}
-            className={`rounded-md border px-3 py-2 text-sm ${technique.colorClass}`}
+            className="rounded-md border border-border/80 bg-background/60 px-3 py-2 text-sm text-foreground"
             title={`${technique.name}: ${technique.description}`}
           >
             <TechniqueBadge

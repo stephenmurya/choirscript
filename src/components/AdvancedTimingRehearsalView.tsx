@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { PART_LABELS } from "@/lib/annotationUtils";
 import { resolveArrangement } from "@/lib/arrangement";
+import { ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, TimingEvent, TimingScope } from "@/lib/songTypes";
 import {
   getBarUnits,
@@ -264,8 +265,9 @@ export function AdvancedTimingRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
+    <div className="mx-auto grid w-full max-w-[1280px] lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
     <article
-      className={`rehearsal-document mx-auto w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
+      className={`rehearsal-document w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >
@@ -294,18 +296,18 @@ export function AdvancedTimingRehearsalView({
       </div>
 
       <div className="flex flex-col gap-8">
-        {resolveArrangement(song).map(({ occurrenceId, section }) => (
+        {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
           <section
-            key={occurrenceId}
+            key={renderIdentity}
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
             <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
             {section.lines.map((line) => (
               <RehearsalTimingLine
-                key={`${occurrenceId}:${line.id}`}
+                key={`${renderIdentity}:${line.id}`}
                 song={song}
                 sectionId={section.id}
-                occurrenceId={occurrenceId}
+                occurrenceId={`${occurrenceId}:${repeatIndex}`}
                 line={line}
                 toggles={toggles}
               />
@@ -314,5 +316,7 @@ export function AdvancedTimingRehearsalView({
         ))}
       </div>
     </article>
+    <ArrangementRoadmap song={song} />
+    </div>
   );
 }

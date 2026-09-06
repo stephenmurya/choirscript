@@ -7,6 +7,30 @@
 
 ---
 
+## PHASE 3C USER-FACING CONTRACT
+
+The internal model remains `Song -> source + arrangements`. The editor exposes that model through
+two focused views rather than separate pages:
+
+- **Lyrics** is the canonical lyric/section workspace for typing, multiline paste, import, headings,
+  section management, and line duplication; SATB lanes and advanced timing grids are hidden here.
+- **Parts** keeps the same canonical lyrics editable beside the SATB/timing editor. The active
+  arrangement is embedded as a compact sticky right panel on desktop and a drawer on mobile.
+
+An arrangement occurrence may carry `repeatCount` (default `1`, normalized to a bounded positive
+integer). Storage remains one occurrence; `resolveArrangement()` expands repeats only for rendering,
+rehearsal, print, and share output. Expanded render identity includes
+`occurrenceId + repeatIndex + innerId`, preventing repeated sections from colliding. Arrangement
+controls support drag handles, keyboard/touch sensors, explicit up/down buttons, and repeat +/-.
+
+`Song.bassEnabled` is the smallest persistent feature flag for the optional Bass lane. Older songs
+derive it from existing bass values during normalization; disabling the lane hides it without
+deleting stored bass data.
+
+The editor uses debounced aggregate autosave with in-memory edits preserved after failure. Delete
+flows use app-native dialogs and state the affected occurrence/timing cascade. No additional
+realtime, polling, per-section, or per-occurrence reads are introduced.
+
 ## A. CURRENT MODEL FINDINGS
 
 Verified against the codebase (not assumed):
@@ -144,6 +168,7 @@ type ArrangementOccurrence = {
   id: string;                 // unique placement identity (createId("occ"))
   sourceSectionId: string;    // REQUIRED reference into source.sections
   note?: string;              // occurrence-local performance note (D-class)
+  repeatCount?: number;       // normalized to >= 1; storage stays compact
   // Timing/lyric/SATB/technique overrides: deliberately NOT in Phase 3B.
   // Type system reserves the seam (see §E); no fields shipped.
 };

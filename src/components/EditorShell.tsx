@@ -2,300 +2,92 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { ArrowLeft, Copy, Ellipsis, Eye, Printer, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Copy,
-  Eye,
-  FileText,
-  ListMusic,
-  Music2,
-  PanelLeft,
-  Printer,
-  Share2,
-  Trash,
-} from "lucide-react";
 import type { Song } from "@/lib/songTypes";
-import { useAuth } from "@/lib/firebase/AuthContext";
-import { signOutUser } from "@/lib/firebase/auth";
 import { useWorkspaceSongs } from "./WorkspaceSongsContext";
+import { ShareDialog } from "./ShareDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { ShareDialog } from "./ShareDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type EditorShellProps = {
   song: Song | null;
   saveStatus: string;
-  activeView: "source" | "arrangement";
+  activeView: "lyrics" | "parts";
   children: ReactNode;
 };
 
-/**
- * Focused editor shell: AppShell's top navbar plus a CURRENT-SONG sidebar
- * (Back to workspace, song identity, Source/Arrangement/Rehearsal navigation, Share /
- * Print / Duplicate actions, Delete in the danger zone). No song library in
- * the editor sidebar. The EDIT group is structured so Phase 3 can add
- * Source/Arrangement entries in the EDIT group.
- */
-export function EditorShell({
-  song,
-  saveStatus,
-  activeView,
-  children,
-}: EditorShellProps) {
+export function EditorShell({ song, saveStatus, activeView, children }: EditorShellProps) {
   const router = useRouter();
-  const { user } = useAuth();
   const { duplicateSong, deleteSong } = useWorkspaceSongs();
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   async function handleDuplicate() {
-    if (!song) {
-      return;
-    }
-
+    if (!song) return;
     try {
       const copyMeta = await duplicateSong(song.id);
       if (copyMeta) {
         toast.success("Song duplicated");
         router.push(`/songs/${copyMeta.id}`);
       }
-    } catch (duplicateError) {
-      console.error("Could not duplicate song", duplicateError);
-      toast.error(
-        duplicateError instanceof Error
-          ? duplicateError.message
-          : "Could not duplicate the song. Please try again.",
-      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not duplicate the song.");
     }
   }
 
   async function handleDelete() {
-    if (!song) {
-      return;
-    }
-
-    if (!window.confirm(`Delete "${song.title || "Untitled Song"}"?`)) {
-      return;
-    }
-
-    setIsDeleting(true);
-
+    if (!song) return;
     try {
       await deleteSong(song.id);
       router.push("/");
-    } catch (deleteError) {
-      console.error("Could not delete song", deleteError);
-      toast.error(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Could not delete the song. Please try again.",
-      );
-    } finally {
-      setIsDeleting(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete the song.");
     }
   }
 
-  function handleSignOut() {
-    signOutUser().catch((signOutError) => {
-      console.error("Sign out failed", signOutError);
-      toast.error("Sign out failed. Please try again.");
-    });
-  }
-
-  function renderSidebarContent() {
-    return (
-      <div className="flex h-full min-h-0 flex-col bg-sidebar text-sidebar-foreground">
-        <div className="p-3">
-          <Link
-            href="/"
-            className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          >
-            <ArrowLeft data-icon="inline-start" />
-            My Workspace
-          </Link>
-        </div>
-
-        {song ? (
-          <>
-            <div className="px-4 pb-3 pt-2">
-              <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                {song.title || "Untitled Song"}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {song.artist || "No artist"}
-              </p>
-              <Badge variant="secondary" className="mt-2">
-                {saveStatus}
-              </Badge>
-            </div>
-
-            <div className="px-3">
-              <p className="px-3 pb-1 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Edit
-              </p>
-              <nav className="flex flex-col gap-1">
-                <Link
-                  href={`/songs/${song.id}?view=source`}
-                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${activeView === "source" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground"}`}
-                >
-                  <FileText data-icon="inline-start" />
-                  Source
-                </Link>
-                <Link
-                  href={`/songs/${song.id}?view=arrangement`}
-                  className={`flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${activeView === "arrangement" ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground"}`}
-                >
-                  <ListMusic data-icon="inline-start" />
-                  Arrangement
-                </Link>
-              </nav>
-
-              <p className="px-3 pb-1 pt-4 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Song
-              </p>
-              <nav className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Song details (title/artist/key/BPM/notes) are edited via
-                    // the metadata panel inside the script — no separate page.
-                    toast.info(
-                      "Song details live in the script: open 'Import lyrics or edit metadata' at the top.",
-                    );
-                  }}
-                  className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Music2 data-icon="inline-start" />
-                  Song details
-                </button>
-                <Link
-                  href={`/songs/${song.id}/rehearsal`}
-                  className="flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Eye data-icon="inline-start" />
-                  Rehearsal
-                </Link>
-              </nav>
-
-              <p className="px-3 pb-1 pt-4 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Actions
-              </p>
-              <nav className="flex flex-col gap-1">
-                <button
-                  type="button"
-                  onClick={() => setIsShareOpen(true)}
-                  className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Share2 data-icon="inline-start" />
-                  Share
-                </button>
-                <Link
-                  href={`/songs/${song.id}/rehearsal`}
-                  className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Printer data-icon="inline-start" />
-                  Print
-                </Link>
-                <button
-                  type="button"
-                  onClick={handleDuplicate}
-                  className="flex h-9 items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-muted-foreground transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Copy data-icon="inline-start" />
-                  Duplicate
-                </button>
-              </nav>
-            </div>
-          </>
-        ) : (
-          <div className="px-4 py-6 text-sm text-muted-foreground">Loading song...</div>
-        )}
-
-        <div className="mt-auto px-3 pb-4">
-          {song ? (
-            <div className="border-t border-sidebar-border pt-3">
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-left text-sm font-medium text-destructive transition hover:bg-destructive/10"
-              >
-                <Trash data-icon="inline-start" />
-                Delete song
-              </button>
-            </div>
-          ) : null}
-          <div className="mt-3 flex items-center gap-2 rounded-2xl px-2 py-1">
-            <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
-              {user?.photoURL ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.photoURL} alt="" className="size-8" referrerPolicy="no-referrer" />
-              ) : (
-                (user?.displayName || user?.email || "?").charAt(0).toUpperCase()
-              )}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">
-              {user?.displayName || user?.email}
-            </span>
-            <Button type="button" variant="ghost" size="sm" onClick={handleSignOut}>
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-svh overflow-x-hidden bg-background text-foreground lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className="no-print hidden min-h-svh border-r border-sidebar-border bg-sidebar lg:block">
-        {renderSidebarContent()}
-      </aside>
-
-      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
-        <SheetContent side="left" className="w-[20rem] max-w-[85vw] p-0" showCloseButton={false}>
-          <SheetHeader className="sr-only">
-            <SheetTitle>Song navigation</SheetTitle>
-            <SheetDescription>Current song actions and account.</SheetDescription>
-          </SheetHeader>
-          {renderSidebarContent()}
-        </SheetContent>
-      </Sheet>
-
-      <div className="min-w-0">
-        <header className="no-print sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur lg:hidden">
-          <div className="flex min-h-14 items-center gap-2 px-3">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setIsMobileNavOpen(true)}
-            >
-              <PanelLeft />
-              <span className="sr-only">Open song menu</span>
-            </Button>
-            <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-              {song?.title || "Untitled Song"}
-            </p>
-            <Badge variant="secondary">{saveStatus}</Badge>
+    <div className="min-h-svh overflow-x-hidden bg-background text-foreground">
+      <header className="no-print sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex min-h-16 max-w-[1400px] items-center gap-2 px-3 sm:px-5 lg:px-8">
+          <Button render={<Link href="/" />} variant="ghost" size="icon-sm" aria-label="Back to workspace"><ArrowLeft /></Button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{song?.title || "Untitled Song"}</p>
+            <div className="flex items-center gap-2"><Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{saveStatus}</Badge><span className="hidden text-xs text-muted-foreground sm:inline">Autosaved</span></div>
           </div>
-        </header>
-
-        <main className="min-w-0 overflow-x-hidden">{children}</main>
-      </div>
-
+          {song ? <nav className="hidden items-center gap-1 md:flex" aria-label="Editor views">
+            <Button render={<Link href={`/songs/${song.id}?view=lyrics`} />} variant={activeView === "lyrics" ? "secondary" : "ghost"} size="sm">Lyrics</Button>
+            <Button render={<Link href={`/songs/${song.id}?view=parts`} />} variant={activeView === "parts" ? "secondary" : "ghost"} size="sm">Parts</Button>
+          </nav> : null}
+          <div className="ml-auto flex items-center gap-1">
+            {song ? <>
+              <Button render={<Link href={`/songs/${song.id}/rehearsal`} />} size="sm" className="gap-1.5 bg-primary text-primary-foreground shadow-sm"><Eye /><span className="hidden sm:inline">Rehearsal</span></Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setIsShareOpen(true)} aria-label="Share"><Share2 /></Button>
+              <Button render={<Link href={`/songs/${song.id}/rehearsal`} />} variant="ghost" size="icon-sm" aria-label="Print"><Printer /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={handleDuplicate} aria-label="Duplicate"><Copy /></Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="More actions" />}><Ellipsis /></DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsShareOpen(true)}><Share2 />Share</DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleDuplicate}><Copy />Duplicate</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setIsDeleteOpen(true)}><Trash2 />Delete song</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </> : null}
+          </div>
+        </div>
+        {song ? <nav className="flex items-center gap-1 border-t border-border/60 px-3 py-1.5 md:hidden" aria-label="Editor views">
+          <Button render={<Link href={`/songs/${song.id}?view=lyrics`} />} variant={activeView === "lyrics" ? "secondary" : "ghost"} size="sm" className="flex-1">Lyrics</Button>
+          <Button render={<Link href={`/songs/${song.id}?view=parts`} />} variant={activeView === "parts" ? "secondary" : "ghost"} size="sm" className="flex-1">Parts</Button>
+        </nav> : null}
+      </header>
+      <main className="min-w-0 overflow-x-hidden">{children}</main>
       <ShareDialog song={song} open={isShareOpen} onOpenChange={setIsShareOpen} />
+      <ConfirmDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen} title={`Delete ${song?.title || "Untitled Song"}?`} description="This removes the song from your workspace and cannot be undone." confirmLabel="Delete song" destructive onConfirm={handleDelete} />
     </div>
   );
 }

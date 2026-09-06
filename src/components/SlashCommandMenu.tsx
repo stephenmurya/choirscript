@@ -7,14 +7,18 @@ export type SlashCommand = {
   label: string;
   description?: string;
   shortcut?: string;
+  keywords?: string[];
+  aliases?: string[];
   action: () => void;
 };
 
 type SlashCommandMenuProps = {
   commands: SlashCommand[];
+  activeIndex: number;
+  onActiveIndexChange: (index: number) => void;
 };
 
-export function SlashCommandMenu({ commands }: SlashCommandMenuProps) {
+export function SlashCommandMenu({ commands, activeIndex, onActiveIndexChange }: SlashCommandMenuProps) {
   return (
     <div
       data-slash-menu="true"
@@ -25,11 +29,13 @@ export function SlashCommandMenu({ commands }: SlashCommandMenuProps) {
       <Command>
         <CommandList>
           <CommandGroup heading="Commands">
-            {commands.map((command) => (
+            {commands.map((command, index) => (
               <CommandItem
                 key={command.id}
                 value={command.label}
                 onSelect={command.action}
+                onMouseEnter={() => onActiveIndexChange(index)}
+                data-active={index === activeIndex ? "true" : undefined}
                 className="flex-col items-start gap-1"
               >
                 <span className="text-sm font-medium">{command.label}</span>
@@ -38,6 +44,9 @@ export function SlashCommandMenu({ commands }: SlashCommandMenuProps) {
                 ) : null}
               </CommandItem>
             ))}
+            {commands.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-muted-foreground">No matching commands</p>
+            ) : null}
           </CommandGroup>
         </CommandList>
       </Command>

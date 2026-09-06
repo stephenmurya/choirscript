@@ -28,6 +28,7 @@ import {
   TIMING_EVENT_LABELS,
 } from "@/lib/timing";
 import { Button } from "@/components/ui/button";
+import { Copy } from "lucide-react";
 import { Popover, PopoverContent, PopoverHeader, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { NotationInput } from "./NotationInput";
@@ -53,6 +54,7 @@ type AdvancedTimingLineProps = {
     value: string,
   ) => void;
   onRemoveTechnique: (lineId: string, syllableIds: string[], techniqueId: string) => void;
+  onDuplicateLine?: (lineId: string) => void;
 };
 
 function flattenLineSyllables(line: SongLine) {
@@ -196,6 +198,7 @@ export function AdvancedTimingLine({
   onLineTimingChange,
   onPartCueChange,
   onRemoveTechnique,
+  onDuplicateLine,
 }: AdvancedTimingLineProps) {
   const starts = barStarts(lineTiming);
   const totalUnits = getTotalUnits(lineTiming);
@@ -254,7 +257,8 @@ export function AdvancedTimingLine({
   }
 
   return (
-    <article data-line-block="true" className="line-block timing-line w-full overflow-hidden py-5">
+    <article data-line-block="true" className="line-block timing-line group/line relative w-full overflow-hidden py-5">
+      {onDuplicateLine ? <Button type="button" variant="ghost" size="icon-xs" className="no-print absolute right-0 top-3 opacity-0 transition group-hover/line:opacity-100 focus:opacity-100" onClick={() => onDuplicateLine(line.id)} aria-label="Duplicate line"><Copy /></Button> : null}
       <div
         data-line-scroll="true"
         className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"

@@ -47,6 +47,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { NewSongDialog } from "./NewSongDialog";
 import { OnboardingDialog } from "./OnboardingDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 type SongActionId = "open" | "rehearsal" | "share" | "duplicate" | "delete";
 
@@ -348,6 +349,7 @@ export function WorkspaceHomePage() {
   const [isNewSongOpen, setIsNewSongOpen] = useState(false);
   const [isTipsOpen, setIsTipsOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingDeleteSong, setPendingDeleteSong] = useState<SongMeta | null>(null);
 
   const visibleSongs = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -396,11 +398,7 @@ export function WorkspaceHomePage() {
       });
     },
     delete: (song) => {
-      if (!window.confirm(`Delete "${song.title || "Untitled Song"}"?`)) {
-        return;
-      }
-
-      withPending(song.id, () => deleteSong(song.id));
+      setPendingDeleteSong(song);
     },
   };
 
@@ -495,6 +493,20 @@ export function WorkspaceHomePage() {
         }}
       />
       <OnboardingDialog open={isTipsOpen} onOpenChange={setIsTipsOpen} />
+      <ConfirmDialog
+        open={Boolean(pendingDeleteSong)}
+        onOpenChange={(open) => { if (!open) setPendingDeleteSong(null); }}
+        title={`Delete ${pendingDeleteSong?.title || "Untitled Song"}?`}
+        description="This removes the song from your workspace and cannot be undone."
+        confirmLabel="Delete song"
+        destructive
+        onConfirm={async () => {
+          if (pendingDeleteSong) {
+            await withPending(pendingDeleteSong.id, () => deleteSong(pendingDeleteSong.id));
+            setPendingDeleteSong(null);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
 import { resolveArrangement } from "@/lib/arrangement";
+import { ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { TechniqueLegend } from "./TechniqueLegend";
@@ -241,8 +242,9 @@ export function ColorfulRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
+    <div className="mx-auto grid w-full max-w-[1280px] lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
     <article
-      className={`rehearsal-document mx-auto w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
+      className={`rehearsal-document w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >
@@ -269,9 +271,9 @@ export function ColorfulRehearsalView({
       ) : null}
 
       <div className="space-y-8">
-        {resolveArrangement(song).map(({ occurrenceId, section }) => (
+        {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
           <section
-            key={occurrenceId}
+            key={renderIdentity}
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
             <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
@@ -280,15 +282,17 @@ export function ColorfulRehearsalView({
             ) : null}
             {section.lines.map((line) => (
               <RehearsalLine
-                key={`${occurrenceId}:${line.id}`}
+                key={`${renderIdentity}:${line.id}`}
                 line={line}
                 toggles={toggles}
-                renderIdentity={`${occurrenceId}:${line.id}`}
+                renderIdentity={`${occurrenceId}:${repeatIndex}:${line.id}`}
               />
             ))}
           </section>
         ))}
       </div>
     </article>
+    <ArrangementRoadmap song={song} />
+    </div>
   );
 }

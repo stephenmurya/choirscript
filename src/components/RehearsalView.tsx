@@ -69,7 +69,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
           // Canonical sanitizer/migration boundary before render state.
           const normalizedSong = normalizeSong(cloudSong);
           setSong(normalizedSong);
-          setToggles((current) => ({ ...current, bass: songHasBass(normalizedSong) }));
+          setToggles((current) => ({ ...current, bass: normalizedSong.bassEnabled || songHasBass(normalizedSong) }));
         }
         setLoaded(true);
       })
@@ -149,7 +149,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
             Display and export
           </h2>
           <div className="mt-3 flex flex-wrap gap-2">
-            {toggleLabels.map((toggle) => (
+            {toggleLabels.filter((toggle) => toggle.key !== "bass" || Boolean(song.bassEnabled || songHasBass(song))).map((toggle) => (
               <label
                 key={toggle.key}
                 className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground"
