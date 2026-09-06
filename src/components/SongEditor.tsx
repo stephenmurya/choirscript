@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
   createId,
@@ -11,11 +10,13 @@ import {
   createDefaultArrangement,
   createLineFromText,
   duplicateLine,
+  deleteLine,
   createSyllableToken,
   normalizeSong,
 } from "@/lib/songStorage";
 import { songHasBass } from "@/lib/songSelection";
 import { parseLyricsInput } from "@/lib/lyricsParser";
+import { preparePendingSyllabification, reconcileLineText, reconcileLineTiming } from "@/lib/lineText";
 import {
   appendOccurrence,
   countOccurrencesForSection,
@@ -26,7 +27,7 @@ import {
   setOccurrenceRepeatCount,
   setOccurrenceNote,
 } from "@/lib/arrangement";
-import { getSongWithMeta, saveSong as saveCloudSong, type WorkspaceContext } from "@/lib/firebase/songs";
+import { getSongWithMeta, saveSong as saveCloudSong } from "@/lib/firebase/songs";
 import type { SongMeta } from "@/lib/firebase/types";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import {
@@ -57,6 +58,7 @@ import { DocumentScriptEditor } from "./DocumentScriptEditor";
 import { EditorShell } from "./EditorShell";
 import { ArrangementEditor } from "./ArrangementEditor";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { EditorInspector } from "./EditorInspector";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 type SongEditorProps = {
   songId: string;
@@ -86,9 +88,6 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   const uid = user?.uid ?? null;
   const activeWorkspaceId = workspaceId;
-
-  const workspaceContext: WorkspaceContext | null =
-    uid && activeWorkspaceId ? { uid, workspaceId: activeWorkspaceId } : null;
 
   // Load the song (metadata + body) from Firestore once. State resets happen
   // via the async boundary (microtask) so the effect body never calls
@@ -183,6 +182,14 @@ export function SongEditor({ songId }: SongEditorProps) {
     return () => window.clearTimeout(timeoutId);
   }, [song, saveState, activeWorkspaceId, uid, songMeta, user?.displayName, user?.photoURL]);
 
+  useEffect(() => {
+    if (editorView !== "parts" || !song || !hasLoaded.current) return;
+    const prepared = preparePendingSyllabification(song);
+    if (!prepared.changed) return;
+    setSong({ ...prepared.song, updatedAt: new Date().toISOString() });
+    setSaveState("dirty");
+  }, [editorView, song?.id]);
+
   function updateSong(updater: (current: Song) => Song) {
     setSong((current) => {
       if (!current) {
@@ -196,34 +203,6 @@ export function SongEditor({ songId }: SongEditorProps) {
     });
     setSaveState("dirty");
   }
-
-  function handleSaveNow() {
-    if (!song || !workspaceContext) {
-      return;
-    }
-
-    setSaveState("saving");
-    saveCloudSong(workspaceContext.workspaceId, song, workspaceContext.uid, songMeta, {
-      uid: workspaceContext.uid,
-      displayName: user?.displayName ?? "",
-      photoURL: user?.photoURL ?? undefined,
-    })
-      .then((meta) => {
-        setSongMeta(meta);
-        setSaveState("saved");
-      })
-      .catch((error) => {
-        console.error("Cloud save failed", error);
-        setSaveState("failed");
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Could not save. Your edits are still here — please try again.",
-        );
-      });
-  }
-
-  void handleSaveNow;
 
   function handleMetadataChange(patch: Partial<Song>) {
     updateSong((current) => ({ ...current, ...patch }));
@@ -389,13 +368,18 @@ export function SongEditor({ songId }: SongEditorProps) {
   }
 
   function handleAddLine(sectionId: string, lyricLine: string) {
+    if (!sectionId) {
+      handleGenerateScript(lyricLine);
+      return;
+    }
     const parsed = parseLyricsInput(lyricLine);
     if (parsed.sections.length === 0) return;
     if (parsed.sections.length > 1 || parsed.sections.some((section) => section.heading)) {
       handleGenerateScript(lyricLine);
       return;
     }
-    const lines = parsed.sections[0].lines.map(createLineFromText);
+    const syllabification = editorView === "parts" ? "auto" : "pending";
+    const lines = parsed.sections[0].lines.map((line) => createLineFromText(line, syllabification));
 
     updateSong((current) => {
       const nextSong = {
@@ -424,7 +408,7 @@ export function SongEditor({ songId }: SongEditorProps) {
     if (hasHeadings) {
       const newSections = parsed.sections.map((parsedSection, index) => {
         const section = createEmptySection(parsedSection.heading ?? `Section ${index + 1}`);
-        section.lines = parsedSection.lines.map(createLineFromText);
+        section.lines = parsedSection.lines.map((line) => createLineFromText(line, editorView === "parts" ? "auto" : "pending"));
         return section;
       });
       updateSong((current) => {
@@ -442,7 +426,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       return;
     }
 
-    const lines = parsed.sections[0].lines.map(createLineFromText);
+    const lines = parsed.sections[0].lines.map((line) => createLineFromText(line, editorView === "parts" ? "auto" : "pending"));
 
     updateSong((current) => {
       if (current.source.sections.length === 0) {
@@ -478,6 +462,68 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   function handleDuplicateLine(sectionId: string, lineId: string) {
     updateSong((current) => duplicateLine(current, sectionId, lineId));
+  }
+
+  function handleUpdateLineText(sectionId: string, lineId: string, text: string) {
+    updateSong((current) => {
+      let nextTiming = current.timingByLine;
+      const sections = current.source.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        return {
+          ...section,
+          lines: section.lines.map((line) => {
+            if (line.id !== lineId) return line;
+            const nextLine = reconcileLineText(line, text);
+            if (current.timingByLine[lineId]) {
+              nextTiming = { ...nextTiming, [lineId]: reconcileLineTiming(current.timingByLine[lineId], nextLine) };
+            }
+            return nextLine;
+          }),
+        };
+      });
+      return { ...current, source: { sections }, timingByLine: nextTiming };
+    });
+  }
+
+  function handleInsertLyrics(sectionId: string, lineId: string, text: string) {
+    const parsed = parseLyricsInput(text);
+    if (parsed.sections.length === 0) return;
+    if (parsed.sections.some((section) => section.heading)) {
+      handleGenerateScript(text);
+      return;
+    }
+    const lines = parsed.sections.flatMap((section) => section.lines).map((line) => createLineFromText(line, "pending"));
+    updateSong((current) => {
+      const sections = current.source.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const index = section.lines.findIndex((line) => line.id === lineId);
+        if (index < 0) return section;
+        const first = reconcileLineText(section.lines[index], parsed.sections[0].lines[0]);
+        return { ...section, lines: [...section.lines.slice(0, index), first, ...lines.slice(1), ...section.lines.slice(index + 1)] };
+      });
+      return { ...current, source: { sections } };
+    });
+  }
+
+  function handleCreateLineAfter(sectionId: string, lineId: string) {
+    const newLine = createLineFromText("");
+    updateSong((current) => ({
+      ...current,
+      source: { sections: current.source.sections.map((section) => {
+        if (section.id !== sectionId) return section;
+        const index = section.lines.findIndex((line) => line.id === lineId);
+        return index < 0 ? section : { ...section, lines: [...section.lines.slice(0, index + 1), newLine, ...section.lines.slice(index + 1)] };
+      }) },
+    }));
+    return newLine.id;
+  }
+
+  function handleDeleteLine(sectionId: string, lineId: string) {
+    const section = song?.source.sections.find((candidate) => candidate.id === sectionId);
+    const index = section?.lines.findIndex((line) => line.id === lineId) ?? -1;
+    const focusId = section && index > 0 ? section.lines[index - 1].id : null;
+    updateSong((current) => deleteLine(current, sectionId, lineId));
+    return focusId;
   }
 
   function handleBassEnabledChange(enabled: boolean) {
@@ -517,8 +563,9 @@ export function SongEditor({ songId }: SongEditorProps) {
                     ? (() => {
                         const words = line.words.map((word) =>
                           word.id === wordId
-                            ? {
+                          ? {
                                 ...word,
+                                syllabification: "manual" as const,
                                 syllables: syllables.map((text, index) => {
                                   const existing = word.syllables[index];
                                   return existing
@@ -671,7 +718,16 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   return shell(
     <div>
-      <div className={editorView === "parts" ? "mx-auto grid max-w-[1400px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:px-8" : "pb-10"}>
+      <div className={editorView === "parts" ? "mx-auto grid max-w-[1500px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[15rem_minmax(0,1fr)_19rem] lg:px-8" : "mx-auto grid max-w-[1280px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[15rem_minmax(0,1fr)] lg:px-8"}>
+      <EditorInspector
+        song={song}
+        view={editorView}
+        includeBass={includeBass}
+        onMetadataChange={handleMetadataChange}
+        onGenerateScript={handleGenerateScript}
+        onBassEnabledChange={handleBassEnabledChange}
+        onModeChange={handleModeChange}
+      />
       {editorView === "parts" ? <ArrangementEditor
           song={song}
           onAddOccurrence={handleAddOccurrence}
@@ -686,7 +742,6 @@ export function SongEditor({ songId }: SongEditorProps) {
       song={song}
       view={editorView}
       includeBass={includeBass}
-      onBassEnabledChange={handleBassEnabledChange}
       selection={lyricSelection}
       focusedSectionId={focusedSectionId}
       onSectionFocusHandled={() => setFocusedSectionId(null)}
@@ -695,8 +750,6 @@ export function SongEditor({ songId }: SongEditorProps) {
       onDeleteSection={handleDeleteSection}
       onCreateSectionAfter={handleCreateSectionAfter}
       onAddLine={handleAddLine}
-      onGenerateScript={handleGenerateScript}
-      onModeChange={handleModeChange}
       timingScope={timingScope}
       onTimingScopeChange={setTimingScope}
       onTimingSettingsChange={handleTimingSettingsChange}
@@ -714,6 +767,10 @@ export function SongEditor({ songId }: SongEditorProps) {
       onUpdateWordSyllables={handleUpdateWordSyllables}
       onPartCueChange={handlePartCueChange}
       onDuplicateLine={handleDuplicateLine}
+      onUpdateLineText={handleUpdateLineText}
+      onInsertLyrics={handleInsertLyrics}
+      onCreateLineAfter={handleCreateLineAfter}
+      onDeleteLine={handleDeleteLine}
       />
       </div>
       {(() => {

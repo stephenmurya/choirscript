@@ -6,7 +6,6 @@ import type {
   LyricSelection,
   PartKey,
   Song,
-  SongMode,
   SongTimingSettings,
   TimingScope,
   VocalPart,
@@ -18,14 +17,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
 import { AdvancedTimingLine } from "./AdvancedTimingLine";
 import { LyricLineBlock } from "./LyricLineBlock";
-import { LyricsImporter } from "./LyricsImporter";
-import { ModeToggle } from "./ModeToggle";
+import { PlainLyricsEditor } from "./PlainLyricsEditor";
 import { SlashCommandLine } from "./SlashCommandLine";
 import { TechniqueContextMenu } from "./TechniqueContextMenu";
 import { TimingScopeSelector } from "./TimingScopeSelector";
@@ -40,7 +35,6 @@ type DocumentScriptEditorProps = {
   song: Song;
   view: "lyrics" | "parts";
   includeBass: boolean;
-  onBassEnabledChange: (enabled: boolean) => void;
   selection: LyricSelection;
   focusedSectionId: string | null;
   onSectionFocusHandled: () => void;
@@ -49,8 +43,6 @@ type DocumentScriptEditorProps = {
   onDeleteSection: (sectionId: string) => void;
   onCreateSectionAfter: (sectionId: string | null, name?: string) => void;
   onAddLine: (sectionId: string, lyricLine: string) => void;
-  onGenerateScript: (lyrics: string) => void;
-  onModeChange: (mode: SongMode) => void;
   timingScope: TimingScope;
   onTimingScopeChange: (scope: TimingScope) => void;
   onTimingSettingsChange: (settings: SongTimingSettings) => void;
@@ -76,6 +68,10 @@ type DocumentScriptEditorProps = {
     value: string,
   ) => void;
   onDuplicateLine: (sectionId: string, lineId: string) => void;
+  onUpdateLineText: (sectionId: string, lineId: string, text: string) => void;
+  onInsertLyrics: (sectionId: string, lineId: string, text: string) => void;
+  onCreateLineAfter: (sectionId: string, lineId: string) => string;
+  onDeleteLine: (sectionId: string, lineId: string) => string | null;
 };
 
 function metadataLine(song: Song) {
@@ -90,7 +86,6 @@ export function DocumentScriptEditor({
   song,
   view,
   includeBass,
-  onBassEnabledChange,
   selection,
   focusedSectionId,
   onSectionFocusHandled,
@@ -99,8 +94,6 @@ export function DocumentScriptEditor({
   onDeleteSection,
   onCreateSectionAfter,
   onAddLine,
-  onGenerateScript,
-  onModeChange,
   timingScope,
   onTimingScopeChange,
   onTimingSettingsChange,
@@ -115,9 +108,12 @@ export function DocumentScriptEditor({
   onUpdateWordSyllables,
   onPartCueChange,
   onDuplicateLine,
+  onUpdateLineText,
+  onInsertLyrics,
+  onCreateLineAfter,
+  onDeleteLine,
 }: DocumentScriptEditorProps) {
   const [techniqueMenuPosition, setTechniqueMenuPosition] = useState<MenuPosition | null>(null);
-  const [isImportOpen, setIsImportOpen] = useState(false);
   const sectionTitleRefs = useRef(new Map<string, HTMLInputElement>());
   const emptyStateFocusedRef = useRef(false);
 
@@ -220,17 +216,32 @@ export function DocumentScriptEditor({
         return;
       }
 
-      if (selection && !isLyricToken && !isInsideTechniqueMenu) {
-        onClearSelection();
-      }
+      if (selection && !isLyricToken && !isInsideTechniqueMenu) onClearSelection();
     }
 
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [onClearSelection, selection, techniqueMenuPosition]);
 
+  if (view === "lyrics") {
+    return <PlainLyricsEditor
+      song={song}
+      focusedSectionId={focusedSectionId}
+      onSectionFocusHandled={onSectionFocusHandled}
+      onRenameSection={onRenameSection}
+      onDeleteSection={onDeleteSection}
+      onCreateSectionAfter={onCreateSectionAfter}
+      onAddLine={onAddLine}
+      onUpdateLineText={onUpdateLineText}
+      onInsertLyrics={onInsertLyrics}
+      onCreateLineAfter={onCreateLineAfter}
+      onDeleteLine={onDeleteLine}
+      onDuplicateLine={onDuplicateLine}
+    />;
+  }
+
   return (
-    <section className="mx-auto w-full max-w-[1100px] overflow-x-hidden px-3 py-5 sm:px-6 sm:py-8 lg:px-8">
+    <section className="order-2 mx-auto w-full max-w-[1100px] overflow-x-clip px-3 py-5 sm:px-6 sm:py-8 lg:order-1 lg:px-8">
       <div className="w-full">
         <div className="mb-8 sm:mb-10">
           <input
@@ -246,7 +257,6 @@ export function DocumentScriptEditor({
           />
           <div className="mt-2 text-sm text-muted-foreground">{metadataLine(song)}</div>
           <div className="no-print mt-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            {view === "parts" ? <div className="flex flex-wrap items-center gap-3"><ModeToggle mode={song.mode} onModeChange={onModeChange} /><label className="inline-flex items-center gap-2 text-sm text-muted-foreground"><input type="checkbox" checked={includeBass} onChange={(event) => onBassEnabledChange(event.target.checked)} className="accent-primary" />Bass lane</label></div> : null}
             {view === "parts" && song.mode === "advanced" ? (
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <TimingScopeSelector
@@ -263,55 +273,6 @@ export function DocumentScriptEditor({
               </div>
             ) : null}
           </div>
-          <details
-            open={isImportOpen}
-            onToggle={(event) => setIsImportOpen(event.currentTarget.open)}
-            className="no-print mt-5 max-w-full rounded-2xl border border-border bg-muted/20 p-3"
-          >
-            <summary className="cursor-pointer text-sm font-semibold text-muted-foreground">
-              Import lyrics or edit metadata
-            </summary>
-            <div className="mt-4 grid gap-4 md:grid-cols-3">
-              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
-                Singer / Artist
-                <Input
-                  value={song.artist ?? ""}
-                  onChange={(event) => onMetadataChange({ artist: event.target.value })}
-                />
-              </Label>
-              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
-                Key
-                <Input
-                  value={song.key ?? ""}
-                  onChange={(event) => onMetadataChange({ key: event.target.value })}
-                />
-              </Label>
-              <Label className="flex flex-col gap-2 text-sm font-medium text-muted-foreground">
-                BPM
-                <Input
-                  value={song.tempo ?? ""}
-                  onChange={(event) => onMetadataChange({ tempo: event.target.value })}
-                />
-              </Label>
-            </div>
-            <Label className="mt-4 flex flex-col gap-2 text-sm font-medium text-muted-foreground">
-              Director notes
-              <Textarea
-                value={song.notes ?? ""}
-                onChange={(event) => onMetadataChange({ notes: event.target.value })}
-                rows={3}
-              />
-            </Label>
-            <div className="mt-4">
-              <LyricsImporter
-                activeSectionName={song.source.sections[0]?.name ?? "the first section"}
-                onGenerate={(lyrics) => {
-                  onGenerateScript(lyrics);
-                  setIsImportOpen(false);
-                }}
-              />
-            </div>
-          </details>
         </div>
 
         {view === "parts" && song.mode === "advanced" ? (
@@ -431,7 +392,7 @@ export function DocumentScriptEditor({
 
           {song.source.sections.length === 0 ? (
             <div data-empty-song-focus="true" data-empty-song-surface="true">
-              <SlashCommandLine onCreateLine={onGenerateScript} onCreateSection={(name) => onCreateSectionAfter(null, name)} />
+              <SlashCommandLine onCreateLine={(text) => onAddLine("", text)} onCreateSection={(name) => onCreateSectionAfter(null, name)} />
               <p className="mt-2 px-1 text-xs text-muted-foreground">
                 Type your first lyric line and press Enter, or press / for options.
               </p>

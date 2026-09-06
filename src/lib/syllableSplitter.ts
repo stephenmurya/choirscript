@@ -1,103 +1,47 @@
-const VOWELS = new Set(["a", "e", "i", "o", "u", "y"]);
+import createHyphenator from "hyphen";
+import patterns from "hyphen/patterns/en-us";
 
+type Hyphenator = (word: string, options?: { hyphenChar?: string }) => string;
+
+const hyphenateEnglish = createHyphenator(patterns, { sync: true }) as Hyphenator;
+
+/**
+ * Hand-hyphenated exceptions for choir vocabulary where English orthographic
+ * patterns are too conservative or choose a different acceptable boundary.
+ * Manual correction remains the final authority in Parts.
+ */
 const EXCEPTIONS: Record<string, string[]> = {
-  amazing: ["A", "maz", "ing"],
-  hallelujah: ["Hal", "le", "lu", "jah"],
-  glory: ["glo", "ry"],
+  overcame: ["o", "ver", "came"],
+  amazing: ["a", "maz", "ing"],
+  hallelujah: ["hal", "le", "lu", "jah"],
   forever: ["for", "ev", "er"],
   savior: ["sav", "ior"],
 };
 
-function isVowel(char: string) {
-  return VOWELS.has(char.toLowerCase());
-}
-
-function hasLaterVowel(value: string, fromIndex: number) {
-  for (let index = fromIndex; index < value.length; index += 1) {
-    if (isVowel(value[index])) {
-      return true;
-    }
+function preserveCase(piece: string, source: string, index: number) {
+  if (source === source.toUpperCase()) return piece.toUpperCase();
+  if (index === 0 && source[0] === source[0]?.toUpperCase()) {
+    return piece.charAt(0).toUpperCase() + piece.slice(1);
   }
-
-  return false;
+  return piece;
 }
 
 function splitCoreWord(core: string): string[] {
-  const lower = core.toLowerCase();
+  const exception = EXCEPTIONS[core.toLowerCase()];
+  if (exception) return exception.map((piece, index) => preserveCase(piece, core, index));
 
-  if (EXCEPTIONS[lower]) {
-    const pieces = EXCEPTIONS[lower];
-    return pieces.map((piece, index) => {
-      if (index === 0 && /^[A-Z]/.test(core)) {
-        return piece.charAt(0).toUpperCase() + piece.slice(1);
-      }
-
-      return piece;
-    });
-  }
-
-  if (core.length <= 5 || !core.split("").some(isVowel)) {
-    return [core];
-  }
-
-  const syllables: string[] = [];
-  let index = 0;
-
-  while (index < core.length) {
-    const start = index;
-
-    while (index < core.length && !isVowel(core[index])) {
-      index += 1;
-    }
-
-    while (index < core.length && isVowel(core[index])) {
-      index += 1;
-    }
-
-    if (!hasLaterVowel(core, index)) {
-      syllables.push(core.slice(start));
-      break;
-    }
-
-    let consonantCount = 0;
-    while (
-      index + consonantCount < core.length &&
-      !isVowel(core[index + consonantCount])
-    ) {
-      consonantCount += 1;
-    }
-
-    let boundary = index;
-
-    if (consonantCount === 1) {
-      boundary = start === 0 && isVowel(core[start]) ? index : index;
-    }
-
-    if (consonantCount > 1) {
-      boundary = index + 1;
-    }
-
-    syllables.push(core.slice(start, boundary));
-    index = boundary;
-  }
-
-  return syllables.filter(Boolean);
+  const hyphenated = hyphenateEnglish(core, { hyphenChar: "-" });
+  const pieces = hyphenated.split("-").filter(Boolean);
+  return pieces.length > 0 ? pieces : [core];
 }
 
 export function splitWordIntoSyllables(word: string): string[] {
   const match = word.match(/^([^A-Za-z0-9]*)([A-Za-z0-9'’]+)([^A-Za-z0-9]*)$/);
 
-  if (!match) {
-    return [word];
-  }
+  if (!match) return [word];
 
   const [, leading, core, trailing] = match;
   const pieces = splitCoreWord(core);
-
-  if (pieces.length === 1) {
-    return [`${leading}${pieces[0]}${trailing}`];
-  }
-
   return pieces.map((piece, index) => {
     const withLeading = index === 0 ? `${leading}${piece}` : piece;
     return index === pieces.length - 1 ? `${withLeading}${trailing}` : withLeading;

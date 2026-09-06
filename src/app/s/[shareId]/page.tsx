@@ -107,7 +107,7 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
   const song = payload.song;
 
   return (
-    <main className="min-h-svh overflow-x-hidden bg-background text-foreground">
+    <main className="min-h-svh overflow-x-clip bg-background text-foreground">
       <header className="no-print border-b border-border bg-background/90 px-3 py-4 backdrop-blur sm:px-5">
         <div className="mx-auto flex max-w-[1100px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">

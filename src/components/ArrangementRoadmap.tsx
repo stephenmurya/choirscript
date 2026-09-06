@@ -15,5 +15,5 @@ export function ArrangementRoadmap({ song }: { song: Song }) {
     </div>
   );
 
-  return <><details className="no-print mb-5 rounded-xl border border-border bg-card p-3 lg:hidden"><summary className="cursor-pointer list-none text-sm font-semibold">Arrangement roadmap</summary><div className="pt-3">{content}</div></details><aside className="no-print hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">{content}</aside></>;
+  return <><details className="no-print mb-5 rounded-xl border border-border bg-card p-3 lg:hidden"><summary className="cursor-pointer list-none text-sm font-semibold">Arrangement roadmap</summary><div className="pt-3">{content}</div></details><aside className="no-print hidden self-start lg:sticky lg:top-20 lg:block lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">{content}</aside></>;
 }

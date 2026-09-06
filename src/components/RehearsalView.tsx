@@ -135,7 +135,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-background text-foreground">
+    <main className="min-h-screen overflow-x-clip bg-background text-foreground">
       <PrintToolbar
         songId={song.id}
         blackAndWhite={toggles.blackAndWhite}

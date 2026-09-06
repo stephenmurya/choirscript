@@ -242,7 +242,7 @@ export function ColorfulRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-[1280px] lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
+    <div className="mx-auto grid w-full max-w-[1280px] items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
     <article
       className={`rehearsal-document w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""

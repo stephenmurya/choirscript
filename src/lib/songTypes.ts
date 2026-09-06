@@ -91,10 +91,14 @@ export type SyllableToken = {
   directorNote?: string;
 };
 
+export type WordSyllabification = "pending" | "auto" | "manual";
+
 export type WordToken = {
   id: string;
   originalWord: string;
   syllables: SyllableToken[];
+  /** Pending words are plain lyric input until Parts prepares them. */
+  syllabification?: WordSyllabification;
 };
 
 export type SongLine = {

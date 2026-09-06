@@ -5,23 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 type LyricsImporterProps = {
-  activeSectionName?: string;
   onGenerate: (lyrics: string) => void;
 };
 
-export function LyricsImporter({ activeSectionName, onGenerate }: LyricsImporterProps) {
+export function LyricsImporter({ onGenerate }: LyricsImporterProps) {
   const [lyrics, setLyrics] = useState("");
   const [fileMessage, setFileMessage] = useState("");
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <section className="rounded-lg border border-border/70 bg-muted/20 p-3">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Lyric Input
+            Import lyrics
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pasted lines generate syllable tokens in {activeSectionName ?? "a default section"}.
+            Paste or load plain lyrics. Section headings are detected automatically.
           </p>
         </div>
       </div>
@@ -32,7 +31,7 @@ export function LyricsImporter({ activeSectionName, onGenerate }: LyricsImporter
         rows={7}
         className="mt-4 resize-y"
       />
-      <div className="mt-3 rounded-2xl border border-border bg-muted/20 p-3">
+      <div className="mt-3 rounded-md border border-border/70 bg-background/60 p-3">
         <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Import .txt
           <input
@@ -73,7 +72,7 @@ export function LyricsImporter({ activeSectionName, onGenerate }: LyricsImporter
         }}
         className="mt-3 w-full"
       >
-        Generate Script
+        Import lyrics
       </Button>
     </section>
   );

@@ -50,7 +50,7 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
   }
 
   return (
-    <div className="min-h-svh overflow-x-hidden bg-background text-foreground">
+    <div className="min-h-svh overflow-x-clip bg-background text-foreground">
       <header className="no-print sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex min-h-16 max-w-[1400px] items-center gap-2 px-3 sm:px-5 lg:px-8">
           <Button render={<Link href="/" />} variant="ghost" size="icon-sm" aria-label="Back to workspace"><ArrowLeft /></Button>
@@ -85,7 +85,7 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
           <Button render={<Link href={`/songs/${song.id}?view=parts`} />} variant={activeView === "parts" ? "secondary" : "ghost"} size="sm" className="flex-1">Parts</Button>
         </nav> : null}
       </header>
-      <main className="min-w-0 overflow-x-hidden">{children}</main>
+      <main className="min-w-0 overflow-x-clip">{children}</main>
       <ShareDialog song={song} open={isShareOpen} onOpenChange={setIsShareOpen} />
       <ConfirmDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen} title={`Delete ${song?.title || "Untitled Song"}?`} description="This removes the song from your workspace and cannot be undone." confirmLabel="Delete song" destructive onConfirm={handleDelete} />
     </div>

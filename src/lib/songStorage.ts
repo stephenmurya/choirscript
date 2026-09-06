@@ -9,6 +9,7 @@ import type {
   SourceSection,
   SyllableToken,
   TechniqueAnnotation,
+  WordSyllabification,
   WordToken,
 } from "./songTypes";
 
@@ -35,22 +36,32 @@ export function createSyllableToken(text: string): SyllableToken {
   };
 }
 
-export function createWordToken(originalWord: string): WordToken {
+export function createWordToken(
+  originalWord: string,
+  syllabification: WordSyllabification = "pending",
+): WordToken {
   return {
     id: createId("word"),
     originalWord,
-    syllables: splitWordIntoSyllables(originalWord).map(createSyllableToken),
+    syllabification,
+    syllables:
+      syllabification === "pending"
+        ? [createSyllableToken(originalWord)]
+        : splitWordIntoSyllables(originalWord).map(createSyllableToken),
   };
 }
 
-export function createLineFromText(text: string): SongLine {
+export function createLineFromText(
+  text: string,
+  syllabification: WordSyllabification = "pending",
+): SongLine {
   return {
     id: createId("line"),
     words: text
       .trim()
       .split(/\s+/)
       .filter(Boolean)
-      .map(createWordToken),
+      .map((word) => createWordToken(word, syllabification)),
     annotations: [],
   };
 }
@@ -159,9 +170,9 @@ function addPhraseTechnique(line: SongLine, syllableIndexes: number[], technique
 export function createSampleSong(): Song {
   const now = new Date().toISOString();
   const verseLines = [
-    createLineFromText("Amazing grace how sweet the sound"),
-    createLineFromText("That saved a wretch like me"),
-    createLineFromText("I once was lost but now am found"),
+    createLineFromText("Amazing grace how sweet the sound", "auto"),
+    createLineFromText("That saved a wretch like me", "auto"),
+    createLineFromText("I once was lost but now am found", "auto"),
   ];
 
   applySampleParts(
@@ -289,6 +300,7 @@ export function normalizeSong(input: Song): Song {
             ...word,
             id: word.id || createId("word"),
             originalWord: word.originalWord ?? "",
+            syllabification: word.syllabification ?? "manual",
             syllables: (word.syllables ?? []).map((syllable) => ({
               ...syllable,
               id: syllable.id || createId("syllable"),
@@ -434,6 +446,23 @@ export function getSongById(id: string) {
 
 export function deleteSong(id: string) {
   saveSongs(loadSongs().filter((song) => song.id !== id));
+}
+
+export function deleteLine(song: Song, sectionId: string, lineId: string): Song {
+  const section = song.source.sections.find((candidate) => candidate.id === sectionId);
+  if (!section || !section.lines.some((line) => line.id === lineId)) return song;
+
+  const timingByLine = { ...song.timingByLine };
+  delete timingByLine[lineId];
+  return {
+    ...song,
+    source: {
+      sections: song.source.sections.map((candidate) => candidate.id === sectionId
+        ? { ...candidate, lines: candidate.lines.filter((line) => line.id !== lineId) }
+        : candidate),
+    },
+    timingByLine,
+  };
 }
 
 /**

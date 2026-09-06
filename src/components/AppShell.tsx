@@ -277,11 +277,11 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-svh overflow-x-hidden bg-background text-foreground">
+    <div className="min-h-svh overflow-x-clip bg-background text-foreground">
       {renderNavbar()}
       {renderMobileNavSheet()}
 
-      <main className="min-w-0 overflow-x-hidden">{children}</main>
+      <main className="min-w-0 overflow-x-clip">{children}</main>
 
       <NewSongDialog
         open={isNewSongOpen}
