@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { deleteLine, createEmptySong, createLineFromText, createWordToken } from "../src/lib/songStorage";
 import { preparePendingSyllabification, reconcileLineText, reconcileLineTiming } from "../src/lib/lineText";
-import { splitWordIntoSyllables } from "../src/lib/syllableSplitter";
+import { splitManualSyllables, splitWordIntoSyllables } from "../src/lib/syllableSplitter";
+import { findSuspiciousLyricsLines, parseLyricsInput } from "../src/lib/lyricsParser";
 import { ensureTimingForSong } from "../src/lib/timing";
 
 function validateSyllabifier() {
@@ -9,6 +10,12 @@ function validateSyllabifier() {
     ["overcame", ["o", "ver", "came"]],
     ["triumph", ["tri", "umph"]],
     ["amazing", ["a", "maz", "ing"]],
+    ["presence", ["pres", "ence"]],
+    ["nothing", ["noth", "ing"]],
+    ["future", ["fu", "ture"]],
+    ["treasure", ["trea", "sure"]],
+    ["matchless", ["match", "less"]],
+    ["resurrection", ["res", "ur", "rec", "tion"]],
     ["hallelujah", ["hal", "le", "lu", "jah"]],
     ["forever", ["for", "ev", "er"]],
     ["victory", ["vic", "to", "ry"]],
@@ -19,12 +26,26 @@ function validateSyllabifier() {
     ["heaven", ["heav", "en"]],
     ["beautiful", ["beau", "ti", "ful"]],
     ["savior", ["sav", "ior"]],
+    ["humanity", ["hu", "man", "i", "ty"]],
+    ["you're", ["you're"]],
+    ["I'm", ["I'm"]],
+    ["won't", ["won't"]],
     ["Amazing,", ["A", "maz", "ing,"]],
   ];
 
   for (const [word, expected] of corpus) {
     assert.deepEqual(splitWordIntoSyllables(word), expected, `unexpected split for ${word}`);
   }
+  assert.deepEqual(splitManualSyllables("pre-sen-ce"), ["pre", "sen", "ce"]);
+  assert.deepEqual(splitManualSyllables("presence"), ["presence"]);
+}
+
+function validateImportReviewData() {
+  const text = "[Chorus]\nSing this chorus\n\nYou might also like\n[Chorus]\nRepeat the line";
+  const parsed = parseLyricsInput(text);
+  assert.deepEqual(parsed.sections.map((section) => section.heading), ["Chorus", "Chorus"]);
+  assert.deepEqual(findSuspiciousLyricsLines(text).map((line) => line.text), ["You might also like"]);
+  assert.deepEqual(parseLyricsInput("I'll be singing this chorus\nTill the day that I die").sections[0].lines, ["I'll be singing this chorus", "Till the day that I die"]);
 }
 
 function validateReconciliation() {
@@ -97,6 +118,7 @@ function validatePreparationAndDeletion() {
 }
 
 validateSyllabifier();
+validateImportReviewData();
 validateReconciliation();
 validatePreparationAndDeletion();
 console.log("Phase 3D editor validation passed.");

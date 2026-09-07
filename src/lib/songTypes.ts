@@ -25,6 +25,8 @@ export type TimingSubdivision = "beat" | "half-beat";
 
 export type VocalPart = "soprano" | "alto" | "tenor" | "bass";
 
+export type VoicePreset = "satb" | "sab" | "ssa" | "ttbb" | "unison" | "custom";
+
 export type TimingScope = "shared" | VocalPart;
 
 export type SongTimingSettings = {
@@ -174,6 +176,9 @@ export type Song = {
   mode: SongMode;
   /** Whether the optional Bass lane is available in Parts/Rehearsal views. */
   bassEnabled?: boolean;
+  /** Persistent voice setup. Older songs derive this from bassEnabled and cues. */
+  voicePreset?: VoicePreset;
+  enabledParts?: VocalPart[];
   /** Canonical Source material. */
   source: { sections: SourceSection[] };
   arrangements: Arrangement[];

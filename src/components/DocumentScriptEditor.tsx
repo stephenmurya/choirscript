@@ -6,6 +6,7 @@ import type {
   LyricSelection,
   PartKey,
   Song,
+  SongLine,
   SongTimingSettings,
   TimingScope,
   VocalPart,
@@ -18,6 +19,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Copy, Pencil, Trash2 } from "lucide-react";
 import { AdvancedTimingLine } from "./AdvancedTimingLine";
 import { LyricLineBlock } from "./LyricLineBlock";
 import { PlainLyricsEditor } from "./PlainLyricsEditor";
@@ -31,10 +34,23 @@ type MenuPosition = {
   y: number;
 };
 
+function timingLineText(line: SongLine) {
+  return line.words.map((word) => word.originalWord).join(" ");
+}
+
+function TimingLineSummary({ line, lineTiming, onEdit, onDuplicate, onDelete }: { line: SongLine; lineTiming: LineTiming; onEdit: () => void; onDuplicate: () => void; onDelete: () => void }) {
+  const eventCount = lineTiming.sharedEvents.length + Object.values(lineTiming.partOverrides).reduce((count, events) => count + (events?.length ?? 0), 0);
+  return <article className="group/timing flex items-center gap-3 border-b border-border/70 py-3">
+    <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{timingLineText(line) || "Empty lyric line"}</p><p className="mt-1 text-xs text-muted-foreground">{lineTiming.bars.length} bar{lineTiming.bars.length === 1 ? "" : "s"} · {eventCount} timing event{eventCount === 1 ? "" : "s"}</p></div>
+    <div className="no-print flex shrink-0 items-center gap-1 opacity-70 transition sm:opacity-0 sm:group-hover/timing:opacity-100 sm:group-focus-within/timing:opacity-100"><Button type="button" variant="outline" size="sm" onClick={onEdit}><Pencil />Edit timing</Button><Button type="button" variant="ghost" size="icon-xs" onClick={onDuplicate} aria-label="Duplicate line"><Copy /></Button><Button type="button" variant="ghost" size="icon-xs" className="text-destructive hover:text-destructive" onClick={onDelete} aria-label="Delete line"><Trash2 /></Button></div>
+  </article>;
+}
+
 type DocumentScriptEditorProps = {
   song: Song;
   view: "lyrics" | "parts";
   includeBass: boolean;
+  enabledParts: PartKey[];
   selection: LyricSelection;
   focusedSectionId: string | null;
   onSectionFocusHandled: () => void;
@@ -60,6 +76,7 @@ type DocumentScriptEditorProps = {
     wordId: string,
     syllables: string[],
   ) => void;
+  onRestoreWordSyllables: (sectionId: string, lineId: string, wordId: string) => void;
   onPartCueChange: (
     sectionId: string,
     lineId: string,
@@ -86,6 +103,7 @@ export function DocumentScriptEditor({
   song,
   view,
   includeBass,
+  enabledParts,
   selection,
   focusedSectionId,
   onSectionFocusHandled,
@@ -106,6 +124,7 @@ export function DocumentScriptEditor({
   onApplyTechnique,
   onRemoveTechnique,
   onUpdateWordSyllables,
+  onRestoreWordSyllables,
   onPartCueChange,
   onDuplicateLine,
   onUpdateLineText,
@@ -114,6 +133,7 @@ export function DocumentScriptEditor({
   onDeleteLine,
 }: DocumentScriptEditorProps) {
   const [techniqueMenuPosition, setTechniqueMenuPosition] = useState<MenuPosition | null>(null);
+  const [focusedTimingLineId, setFocusedTimingLineId] = useState<string | null>(null);
   const sectionTitleRefs = useRef(new Map<string, HTMLInputElement>());
   const emptyStateFocusedRef = useRef(false);
 
@@ -241,7 +261,7 @@ export function DocumentScriptEditor({
   }
 
   return (
-    <section className="order-2 mx-auto w-full max-w-[1100px] overflow-x-clip px-3 py-5 sm:px-6 sm:py-8 lg:order-1 lg:px-8">
+    <section className="order-2 mx-auto w-full max-w-[1100px] overflow-x-clip px-3 py-5 sm:px-6 sm:py-8 xl:order-1 lg:px-8">
       <div className="w-full">
         <div className="mb-8 sm:mb-10">
           <input
@@ -330,15 +350,17 @@ export function DocumentScriptEditor({
                   onClick={() => onDeleteSection(section.id)}
                   className="no-print shrink-0 rounded-lg px-2 py-1 text-xs font-medium text-destructive transition hover:bg-destructive/10"
                 >
-                  Delete Source
+                  Delete section
                 </button>
               </div>
               {section.lines.map((line, lineIndex) => {
                 if (view === "parts" && song.mode === "advanced") {
                   const lineTiming = song.timingByLine[line.id];
 
-                  return lineTiming ? (
-                    <AdvancedTimingLine
+                  return lineTiming ? focusedTimingLineId === line.id ? (
+                    <div key={line.id}>
+                      <Button type="button" variant="ghost" size="sm" className="no-print mb-2" onClick={() => setFocusedTimingLineId(null)}>Back to timing overview</Button>
+                      <AdvancedTimingLine
                       key={line.id}
                       sectionId={section.id}
                       line={line}
@@ -346,6 +368,7 @@ export function DocumentScriptEditor({
                       lineTiming={lineTiming}
                       settings={song.timingSettings}
                       includeBass={includeBass}
+                      enabledParts={enabledParts}
                       timingScope={timingScope}
                       onLineTimingChange={(nextLineTiming) =>
                         onLineTimingChange(line.id, nextLineTiming)
@@ -353,8 +376,9 @@ export function DocumentScriptEditor({
                       onPartCueChange={onPartCueChange}
                       onRemoveTechnique={onRemoveTechnique}
                       onDuplicateLine={(lineId) => onDuplicateLine(section.id, lineId)}
-                    />
-                  ) : null;
+                      />
+                    </div>
+                  ) : <TimingLineSummary key={line.id} line={line} lineTiming={lineTiming} onEdit={() => setFocusedTimingLineId(line.id)} onDuplicate={() => onDuplicateLine(section.id, line.id)} onDelete={() => onDeleteLine(section.id, line.id)} /> : null;
                 }
 
                 return (
@@ -364,6 +388,7 @@ export function DocumentScriptEditor({
                     line={line}
                     lineIndex={lineIndex}
                     includeBass={includeBass}
+                    enabledParts={enabledParts}
                     showParts={view === "parts"}
                     selection={selection}
                     onSelectionChange={(nextSelection, menuPosition) => {
@@ -373,6 +398,7 @@ export function DocumentScriptEditor({
                       }
                     }}
                     onUpdateWordSyllables={onUpdateWordSyllables}
+                    onRestoreWordSyllables={onRestoreWordSyllables}
                     onPartCueChange={onPartCueChange}
                     onRemoveTechnique={onRemoveTechnique}
                     onDuplicateLine={(lineId) => onDuplicateLine(section.id, lineId)}

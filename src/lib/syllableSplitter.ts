@@ -13,9 +13,16 @@ const hyphenateEnglish = createHyphenator(patterns, { sync: true }) as Hyphenato
 const EXCEPTIONS: Record<string, string[]> = {
   overcame: ["o", "ver", "came"],
   amazing: ["a", "maz", "ing"],
+  presence: ["pres", "ence"],
+  nothing: ["noth", "ing"],
+  future: ["fu", "ture"],
+  treasure: ["trea", "sure"],
+  matchless: ["match", "less"],
+  resurrection: ["res", "ur", "rec", "tion"],
   hallelujah: ["hal", "le", "lu", "jah"],
   forever: ["for", "ev", "er"],
   savior: ["sav", "ior"],
+  humanity: ["hu", "man", "i", "ty"],
 };
 
 function preserveCase(piece: string, source: string, index: number) {

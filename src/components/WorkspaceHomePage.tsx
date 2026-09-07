@@ -48,6 +48,7 @@ import { Input } from "@/components/ui/input";
 import { NewSongDialog } from "./NewSongDialog";
 import { OnboardingDialog } from "./OnboardingDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { formatTempo } from "@/lib/songDisplay";
 
 type SongActionId = "open" | "rehearsal" | "share" | "duplicate" | "delete";
 
@@ -141,7 +142,7 @@ function ContributorAvatar({
   displayName: string;
   photoURL?: string;
 }) {
-  const initials = (displayName || "?").trim().charAt(0).toUpperCase();
+  const initials = (displayName || "U").trim().charAt(0).toUpperCase();
 
   return (
     <Tooltip>
@@ -215,7 +216,7 @@ function SongCard({
   isPending: boolean;
   actions: SongActionHandlers;
 }) {
-  const metadataParts = [song.artist, song.key, song.tempo ? `${song.tempo} BPM` : null].filter(
+  const metadataParts = [song.artist, song.key, formatTempo(song.tempo) || null].filter(
     Boolean,
   );
   const modules = song.cardSummary?.modules ?? [];

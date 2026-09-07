@@ -13,6 +13,7 @@ import { ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { TechniqueLegend } from "./TechniqueLegend";
+import { formatTempo } from "@/lib/songDisplay";
 
 export type RehearsalDisplayToggles = {
   soprano: boolean;
@@ -23,6 +24,7 @@ export type RehearsalDisplayToggles = {
   directorNotes: boolean;
   largeText: boolean;
   blackAndWhite: boolean;
+  enabledParts: PartKey[];
 };
 
 function VoiceLaneValue({
@@ -54,11 +56,7 @@ function ReadOnlyVoiceLanes({
 }) {
   const syllables = flattenLineSyllables(line);
   const rows = PART_LABELS.filter((part) => {
-    if (part.key === "bass") {
-      return toggles.bass;
-    }
-
-    return toggles[part.key];
+    return toggles.enabledParts.includes(part.key) && toggles[part.key];
   });
   const labelClass: Record<PartKey, string> = {
     soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
@@ -253,7 +251,7 @@ export function ColorfulRehearsalView({
           {song.title || "Untitled Song"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {[song.artist ? `Singer: ${song.artist}` : null, song.key ? `Key: ${song.key}` : null, song.tempo ? `BPM: ${song.tempo}` : null]
+          {[song.artist ? `Singer: ${song.artist}` : null, song.key ? `Key: ${song.key}` : null, formatTempo(song.tempo) ? formatTempo(song.tempo) : null]
             .filter(Boolean)
             .join(", ")}
         </p>
@@ -266,7 +264,7 @@ export function ColorfulRehearsalView({
 
       {toggles.techniques ? (
         <div className="mb-8">
-          <TechniqueLegend />
+          <TechniqueLegend song={song} />
         </div>
       ) : null}
 
@@ -274,6 +272,8 @@ export function ColorfulRehearsalView({
         {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
           <section
             key={renderIdentity}
+            id={`rehearsal-${renderIdentity}`}
+            data-rehearsal-section="true"
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
             <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>

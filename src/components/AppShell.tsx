@@ -29,6 +29,7 @@ import {
 import { NewSongDialog } from "./NewSongDialog";
 import { OnboardingDialog } from "./OnboardingDialog";
 import { ShareDialog } from "./ShareDialog";
+import { formatTempo } from "@/lib/songDisplay";
 
 type AppShellProps = {
   activeSongId?: string | null;
@@ -37,7 +38,7 @@ type AppShellProps = {
 };
 
 function songMetadata(song: Pick<Song, "artist" | "key" | "tempo">) {
-  return [song.artist, song.key, song.tempo].filter(Boolean).join(" / ");
+  return [song.artist, song.key, formatTempo(song.tempo)].filter(Boolean).join(" / ");
 }
 
 /**
@@ -98,7 +99,7 @@ export function AppShell({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.photoURL} alt="" className="size-8" referrerPolicy="no-referrer" />
             ) : (
-              (user?.displayName || user?.email || "?").charAt(0).toUpperCase()
+              (user?.displayName || user?.email || "U").charAt(0).toUpperCase()
             )}
           </span>
           <span className="sr-only">Account menu</span>
@@ -258,7 +259,7 @@ export function AppShell({
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={user.photoURL} alt="" className="size-8" referrerPolicy="no-referrer" />
                     ) : (
-                      (user.displayName || user.email || "?").charAt(0).toUpperCase()
+                      (user.displayName || user.email || "U").charAt(0).toUpperCase()
                     )}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-xs font-medium text-sidebar-foreground">

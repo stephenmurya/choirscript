@@ -10,6 +10,7 @@ type VoicePartLanesProps = {
   lineIndex: number;
   syllables: FlatSyllable[];
   includeBass: boolean;
+  enabledParts?: PartKey[];
   gridStartRow: number;
   onPartCueChange: (syllableId: string, part: PartKey, value: string) => void;
 };
@@ -19,10 +20,11 @@ export function VoicePartLanes({
   lineIndex,
   syllables,
   includeBass,
+  enabledParts,
   gridStartRow,
   onPartCueChange,
 }: VoicePartLanesProps) {
-  const rows = PART_LABELS.filter((part) => includeBass || part.key !== "bass");
+  const rows = PART_LABELS.filter((part) => enabledParts ? enabledParts.includes(part.key) : includeBass || part.key !== "bass");
   const labelClass: Record<PartKey, string> = {
     soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
     alto: "border-violet-400/40 bg-violet-500/10 text-violet-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",

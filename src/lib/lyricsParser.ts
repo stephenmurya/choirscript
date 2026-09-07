@@ -7,6 +7,11 @@ export type ParsedLyricsDocument = {
   sections: ParsedLyricsSection[];
 };
 
+export type SuspiciousLyricsLine = {
+  text: string;
+  reason: string;
+};
+
 const SECTION_NAMES = [
   "verse",
   "chorus",
@@ -74,4 +79,26 @@ export function parseLyricsInput(text: string): ParsedLyricsDocument {
   });
 
   return { sections: sections.filter((section) => section.lines.length > 0) };
+}
+
+const SUSPICIOUS_PATTERNS: Array<[RegExp, string]> = [
+  [/you might also like/i, "Recommendation text"],
+  [/more songs? from/i, "Recommendation text"],
+  [/related lyrics?/i, "Website navigation"],
+  [/recommended/i, "Recommendation text"],
+  [/^(written|submitted|contributed|annotations?|lyrics by)\b/i, "Contributor or annotation text"],
+  [/^(home|share|subscribe|sign in|log in|advertisement)\b/i, "Website navigation"],
+];
+
+/** Flag likely scraped website copy without removing or rewriting it. */
+export function findSuspiciousLyricsLines(text: string): SuspiciousLyricsLine[] {
+  return text
+    .replace(/\r\n|\r/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const match = SUSPICIOUS_PATTERNS.find(([pattern]) => pattern.test(line));
+      return match ? [{ text: line, reason: match[1] }] : [];
+    });
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
   createId,
@@ -14,9 +15,10 @@ import {
   createSyllableToken,
   normalizeSong,
 } from "@/lib/songStorage";
-import { songHasBass } from "@/lib/songSelection";
+import { getEnabledVoiceParts } from "@/lib/songSelection";
 import { parseLyricsInput } from "@/lib/lyricsParser";
 import { preparePendingSyllabification, reconcileLineText, reconcileLineTiming } from "@/lib/lineText";
+import { splitWordIntoSyllables } from "@/lib/syllableSplitter";
 import {
   appendOccurrence,
   countOccurrencesForSection,
@@ -45,6 +47,7 @@ import type {
   SongTimingSettings,
   TimingScope,
   VocalPart,
+  VoicePreset,
 } from "@/lib/songTypes";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +62,7 @@ import { EditorShell } from "./EditorShell";
 import { ArrangementEditor } from "./ArrangementEditor";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { EditorInspector } from "./EditorInspector";
+import { ImportReviewDialog } from "./ImportReviewDialog";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 type SongEditorProps = {
   songId: string;
@@ -81,6 +85,10 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [lyricSelection, setLyricSelection] = useState<LyricSelection>(null);
   const [includeBass, setIncludeBass] = useState(false);
   const [pendingDeleteSectionId, setPendingDeleteSectionId] = useState<string | null>(null);
+  const [pendingDeleteLine, setPendingDeleteLine] = useState<{ sectionId: string; lineId: string } | null>(null);
+  const [pendingLineEdit, setPendingLineEdit] = useState<{ sectionId: string; lineId: string; text: string } | null>(null);
+  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [pendingImportText, setPendingImportText] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
@@ -127,7 +135,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         const normalizedSong = normalizeSong(result.song);
         setSong(normalizedSong);
         setSongMeta(result.meta);
-        setIncludeBass(normalizedSong.bassEnabled ?? songHasBass(normalizedSong));
+        setIncludeBass(getEnabledVoiceParts(normalizedSong).includes("bass"));
         setActiveSectionId(normalizedSong.source.sections[0]?.id ?? null);
         hasLoaded.current = true;
         setSaveState("saved");
@@ -184,11 +192,14 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   useEffect(() => {
     if (editorView !== "parts" || !song || !hasLoaded.current) return;
-    const prepared = preparePendingSyllabification(song);
-    if (!prepared.changed) return;
-    setSong({ ...prepared.song, updatedAt: new Date().toISOString() });
-    setSaveState("dirty");
-  }, [editorView, song?.id]);
+    const timeoutId = window.setTimeout(() => {
+      const prepared = preparePendingSyllabification(song);
+      if (!prepared.changed) return;
+      setSong({ ...prepared.song, updatedAt: new Date().toISOString() });
+      setSaveState("dirty");
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [editorView, song]);
 
   function updateSong(updater: (current: Song) => Song) {
     setSong((current) => {
@@ -209,9 +220,10 @@ export function SongEditor({ songId }: SongEditorProps) {
   }
 
   function handleModeChange(mode: SongMode) {
-    updateSong((current) => {
-      const nextSong = { ...current, mode };
-      return mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
+    setSong((current) => {
+      if (!current) return current;
+      const prepared = mode === "advanced" ? preparePendingSyllabification(current).song : current;
+      return mode === "advanced" ? ensureTimingForSong({ ...prepared, mode }) : { ...prepared, mode };
     });
   }
 
@@ -288,6 +300,31 @@ export function SongEditor({ songId }: SongEditorProps) {
     setActiveSectionId((current) => (current === pendingDeleteSectionId ? remainingSectionId : current));
     setFocusedSectionId(null);
     setPendingDeleteSectionId(null);
+  }
+
+  function lineHasMeaningfulData(lineId: string) {
+    const line = song?.source.sections.flatMap((section) => section.lines).find((candidate) => candidate.id === lineId);
+    if (!line) return false;
+    const hasSyllableData = line.words.some((word) => word.syllables.some((syllable) => Boolean(syllable.soprano || syllable.alto || syllable.tenor || syllable.bass || syllable.directorNote || syllable.techniques.length)));
+    const timing = song?.timingByLine[lineId];
+    return hasSyllableData || line.annotations.length > 0 || Boolean(timing && (timing.sharedEvents.length > 0 || Object.values(timing.partOverrides).some((events) => Boolean(events?.length))));
+  }
+
+  function deleteLineAndOfferUndo(sectionId: string, lineId: string) {
+    const currentSection = song?.source.sections.find((section) => section.id === sectionId);
+    const lineIndex = currentSection?.lines.findIndex((line) => line.id === lineId) ?? -1;
+    const deletedLine = currentSection?.lines[lineIndex];
+    const deletedTiming = song?.timingByLine[lineId];
+    if (!deletedLine || lineIndex < 0) return null;
+    updateSong((current) => deleteLine(current, sectionId, lineId));
+    toast("Line deleted", { action: { label: "Undo", onClick: () => updateSong((current) => ({ ...current, source: { sections: current.source.sections.map((section) => section.id !== sectionId ? section : { ...section, lines: [...section.lines.slice(0, lineIndex), deletedLine, ...section.lines.slice(lineIndex)] }) }, timingByLine: deletedTiming ? { ...current.timingByLine, [lineId]: deletedTiming } : current.timingByLine })) } });
+    return currentSection.lines[lineIndex - 1]?.id ?? null;
+  }
+
+  function confirmDeleteLine() {
+    if (!pendingDeleteLine) return;
+    deleteLineAndOfferUndo(pendingDeleteLine.sectionId, pendingDeleteLine.lineId);
+    setPendingDeleteLine(null);
   }
 
   function handleAddOccurrence(sourceSectionId: string) {
@@ -460,11 +497,43 @@ export function SongEditor({ songId }: SongEditorProps) {
     });
   }
 
+  function handleReviewImport(lyrics: string) {
+    if (lyrics.trim()) setPendingImportText(lyrics);
+  }
+
+  function handleApplyImport(lyrics: string, mode: "replace" | "append") {
+    const parsed = parseLyricsInput(lyrics);
+    if (parsed.sections.length === 0) return;
+
+    const importedSections = parsed.sections.map((parsedSection, index) => {
+      const section = createEmptySection(parsedSection.heading ?? `Imported section ${index + 1}`);
+      section.lines = parsedSection.lines.map((line) => createLineFromText(line, "pending"));
+      return section;
+    });
+
+    updateSong((current) => {
+      const activeArrangement = current.arrangements.find((arrangement) => arrangement.id === current.activeArrangementId) ?? current.arrangements[0];
+      const importedOccurrences = importedSections.map((section) => ({ id: createId("occ"), sourceSectionId: section.id, repeatCount: 1 }));
+      const sourceSections = mode === "replace" ? importedSections : [...current.source.sections, ...importedSections];
+      const arrangements = current.arrangements.map((arrangement) => arrangement.id === activeArrangement?.id
+        ? { ...arrangement, occurrences: mode === "replace" ? importedOccurrences : [...arrangement.occurrences, ...importedOccurrences] }
+        : arrangement);
+      const nextSong = { ...current, source: { sections: sourceSections }, arrangements };
+      return nextSong.mode === "advanced" ? ensureTimingForSong(nextSong) : nextSong;
+    });
+    setActiveSectionId(importedSections[0].id);
+    setPendingImportText(null);
+  }
+
   function handleDuplicateLine(sectionId: string, lineId: string) {
     updateSong((current) => duplicateLine(current, sectionId, lineId));
   }
 
-  function handleUpdateLineText(sectionId: string, lineId: string, text: string) {
+  function lineHasMusicalData(line: Song["source"]["sections"][number]["lines"][number]) {
+    return line.annotations.length > 0 || line.words.some((word) => word.syllables.some((syllable) => Boolean(syllable.soprano || syllable.alto || syllable.tenor || syllable.bass || syllable.directorNote || syllable.techniques.length)));
+  }
+
+  function applyLineTextEdit(sectionId: string, lineId: string, text: string) {
     updateSong((current) => {
       let nextTiming = current.timingByLine;
       const sections = current.source.sections.map((section) => {
@@ -485,24 +554,23 @@ export function SongEditor({ songId }: SongEditorProps) {
     });
   }
 
-  function handleInsertLyrics(sectionId: string, lineId: string, text: string) {
-    const parsed = parseLyricsInput(text);
-    if (parsed.sections.length === 0) return;
-    if (parsed.sections.some((section) => section.heading)) {
-      handleGenerateScript(text);
+  function handleUpdateLineText(sectionId: string, lineId: string, text: string) {
+    const currentSong = song;
+    const line = currentSong?.source.sections.find((section) => section.id === sectionId)?.lines.find((candidate) => candidate.id === lineId);
+    if (!line) return;
+    const nextLine = reconcileLineText(line, text);
+    const removedMusicalWord = line.words.some((word) => lineHasMusicalData({ ...line, words: [word] }) && !nextLine.words.some((candidate) => candidate.id === word.id));
+    const nextTiming = currentSong?.timingByLine[lineId] ? reconcileLineTiming(currentSong.timingByLine[lineId], nextLine) : undefined;
+    const removedTiming = Boolean(currentSong?.timingByLine[lineId] && nextTiming && nextTiming.sharedEvents.length < currentSong.timingByLine[lineId].sharedEvents.length);
+    if (removedMusicalWord || removedTiming || (line.annotations.length > nextLine.annotations.length && lineHasMusicalData(line))) {
+      setPendingLineEdit({ sectionId, lineId, text });
       return;
     }
-    const lines = parsed.sections.flatMap((section) => section.lines).map((line) => createLineFromText(line, "pending"));
-    updateSong((current) => {
-      const sections = current.source.sections.map((section) => {
-        if (section.id !== sectionId) return section;
-        const index = section.lines.findIndex((line) => line.id === lineId);
-        if (index < 0) return section;
-        const first = reconcileLineText(section.lines[index], parsed.sections[0].lines[0]);
-        return { ...section, lines: [...section.lines.slice(0, index), first, ...lines.slice(1), ...section.lines.slice(index + 1)] };
-      });
-      return { ...current, source: { sections } };
-    });
+    applyLineTextEdit(sectionId, lineId, text);
+  }
+
+  function handleInsertLyrics(_sectionId: string, _lineId: string, text: string) {
+    handleReviewImport(text);
   }
 
   function handleCreateLineAfter(sectionId: string, lineId: string) {
@@ -522,13 +590,22 @@ export function SongEditor({ songId }: SongEditorProps) {
     const section = song?.source.sections.find((candidate) => candidate.id === sectionId);
     const index = section?.lines.findIndex((line) => line.id === lineId) ?? -1;
     const focusId = section && index > 0 ? section.lines[index - 1].id : null;
-    updateSong((current) => deleteLine(current, sectionId, lineId));
+    if (lineHasMeaningfulData(lineId)) {
+      setPendingDeleteLine({ sectionId, lineId });
+      return null;
+    }
+    deleteLineAndOfferUndo(sectionId, lineId);
     return focusId;
   }
 
-  function handleBassEnabledChange(enabled: boolean) {
-    setIncludeBass(enabled);
-    updateSong((current) => ({ ...current, bassEnabled: enabled }));
+  function handleVoiceSettingsChange(preset: VoicePreset, parts: VocalPart[]) {
+    setIncludeBass(parts.includes("bass"));
+    updateSong((current) => ({
+      ...current,
+      voicePreset: preset,
+      enabledParts: parts,
+      bassEnabled: parts.includes("bass"),
+    }));
   }
 
   function handleApplyTechnique(techniqueId: string) {
@@ -598,6 +675,13 @@ export function SongEditor({ songId }: SongEditorProps) {
             : section,
         ),
       },
+    }));
+  }
+
+  function handleRestoreWordSyllables(sectionId: string, lineId: string, wordId: string) {
+    updateSong((current) => ({
+      ...current,
+      source: { sections: current.source.sections.map((section) => section.id !== sectionId ? section : { ...section, lines: section.lines.map((line) => line.id !== lineId ? line : { ...line, words: line.words.map((word) => word.id !== wordId ? word : { ...word, syllabification: "auto" as const, syllables: splitWordIntoSyllables(word.originalWord).map((text, index) => word.syllables[index] ? { ...word.syllables[index], text } : createSyllableToken(text)) }) }) }) },
     }));
   }
 
@@ -718,15 +802,17 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   return shell(
     <div>
-      <div className={editorView === "parts" ? "mx-auto grid max-w-[1500px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[15rem_minmax(0,1fr)_19rem] lg:px-8" : "mx-auto grid max-w-[1280px] gap-6 px-3 pb-10 sm:px-5 lg:grid-cols-[15rem_minmax(0,1fr)] lg:px-8"}>
+      <div className={editorView === "parts" ? `mx-auto grid max-w-[1500px] gap-6 px-3 pb-10 sm:px-5 ${isInspectorCollapsed ? "xl:grid-cols-[3rem_minmax(0,1fr)_19rem]" : "xl:grid-cols-[15rem_minmax(0,1fr)_19rem]"} lg:px-8` : `mx-auto grid max-w-[1280px] gap-6 px-3 pb-10 sm:px-5 ${isInspectorCollapsed ? "xl:grid-cols-[3rem_minmax(0,1fr)]" : "xl:grid-cols-[15rem_minmax(0,1fr)]"} lg:px-8`}>
       <EditorInspector
         song={song}
         view={editorView}
-        includeBass={includeBass}
         onMetadataChange={handleMetadataChange}
-        onGenerateScript={handleGenerateScript}
-        onBassEnabledChange={handleBassEnabledChange}
+        onReviewImport={handleReviewImport}
         onModeChange={handleModeChange}
+        enabledParts={getEnabledVoiceParts(song)}
+        onVoiceSettingsChange={handleVoiceSettingsChange}
+        collapsed={isInspectorCollapsed}
+        onCollapsedChange={setIsInspectorCollapsed}
       />
       {editorView === "parts" ? <ArrangementEditor
           song={song}
@@ -742,6 +828,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       song={song}
       view={editorView}
       includeBass={includeBass}
+      enabledParts={getEnabledVoiceParts(song)}
       selection={lyricSelection}
       focusedSectionId={focusedSectionId}
       onSectionFocusHandled={() => setFocusedSectionId(null)}
@@ -765,6 +852,7 @@ export function SongEditor({ songId }: SongEditorProps) {
       onApplyTechnique={handleApplyTechnique}
       onRemoveTechnique={handleRemoveTechnique}
       onUpdateWordSyllables={handleUpdateWordSyllables}
+      onRestoreWordSyllables={handleRestoreWordSyllables}
       onPartCueChange={handlePartCueChange}
       onDuplicateLine={handleDuplicateLine}
       onUpdateLineText={handleUpdateLineText}
@@ -779,13 +867,38 @@ export function SongEditor({ songId }: SongEditorProps) {
         return <ConfirmDialog
           open={Boolean(pendingSection)}
           onOpenChange={(open) => { if (!open) setPendingDeleteSectionId(null); }}
-          title={`Delete ${pendingSection?.name ?? "Source section"}?`}
-          description={pendingSection && usageCount > 0 ? `${pendingSection.name} is used ${usageCount} time${usageCount === 1 ? "" : "s"} in the current arrangement. Deleting this Source section will also remove those placements and its timing data.` : "This removes the Source section. The action cannot be undone."}
+          title={`Delete ${pendingSection?.name ?? "section"}?`}
+          description={pendingSection && usageCount > 0 ? `${pendingSection.name} is used ${usageCount} time${usageCount === 1 ? "" : "s"} in the current arrangement. Deleting this section will also remove those placements and its timing data.` : "This removes the section and its lyrics. The action cannot be undone."}
           confirmLabel="Delete section"
           destructive
           onConfirm={confirmDeleteSection}
         />;
       })()}
+      <ConfirmDialog
+        open={Boolean(pendingDeleteLine)}
+        onOpenChange={(open) => { if (!open) setPendingDeleteLine(null); }}
+        title="Delete lyric line?"
+        description="This line contains vocal, technique, or timing data. Deleting it removes that data too. You can undo immediately afterward."
+        confirmLabel="Delete line"
+        destructive
+        onConfirm={confirmDeleteLine}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingLineEdit)}
+        onOpenChange={(open) => { if (!open) setPendingLineEdit(null); }}
+        title="Apply lyric edit?"
+        description="This edit changes words that have vocal, technique, or timing data. Unmatched data on this line will be removed, while all safely matched data stays intact."
+        confirmLabel="Apply lyric edit"
+        destructive
+        onConfirm={() => { if (pendingLineEdit) applyLineTextEdit(pendingLineEdit.sectionId, pendingLineEdit.lineId, pendingLineEdit.text); setPendingLineEdit(null); }}
+      />
+      <ImportReviewDialog
+        key={pendingImportText ?? "closed"}
+        open={Boolean(pendingImportText)}
+        text={pendingImportText ?? ""}
+        onOpenChange={(open) => { if (!open) setPendingImportText(null); }}
+        onApply={handleApplyImport}
+      />
     </div>,
   );
 }

@@ -58,7 +58,7 @@ export function PlainLyricsEditor({
     if (input) {
       input.focus();
       input.select();
-      setFocusLineId(null);
+      window.setTimeout(() => setFocusLineId(null), 0);
     }
   }, [focusLineId, song]);
 
@@ -120,7 +120,7 @@ export function PlainLyricsEditor({
                     className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-[1.05rem] leading-7 text-foreground outline-none transition placeholder:text-muted-foreground hover:bg-muted/20 focus:border-border focus:bg-muted/20"
                     placeholder={lineIndex === 0 ? "Type lyrics…" : "Continue the line…"}
                   />
-                  <div className="no-print flex shrink-0 items-center gap-0.5 opacity-60 sm:opacity-0 sm:transition sm:group-hover/line:opacity-100">
+                  <div className="no-print flex shrink-0 items-center gap-0.5 opacity-60 sm:opacity-0 sm:transition sm:group-hover/line:opacity-100 sm:group-focus-within/line:opacity-100">
                     <Button type="button" variant="ghost" size="icon-xs" onClick={() => onDuplicateLine(section.id, line.id)} aria-label="Duplicate line"><Copy /></Button>
                     <Button type="button" variant="ghost" size="icon-xs" className="text-destructive hover:text-destructive" onClick={() => { setFocusLineId(onDeleteLine(section.id, line.id)); }} aria-label="Delete line"><Trash2 /></Button>
                   </div>

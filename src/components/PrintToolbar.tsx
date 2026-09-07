@@ -2,23 +2,22 @@
 
 import Link from "next/link";
 import { Printer } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 
 type PrintToolbarProps = {
   songId: string;
   blackAndWhite: boolean;
-  onBlackAndWhiteChange: (value: boolean) => void;
 };
 
 export function PrintToolbar({
   songId,
   blackAndWhite,
-  onBlackAndWhiteChange,
 }: PrintToolbarProps) {
   function handlePrint() {
     // MVP uses the browser print dialog. Server-side PDF rendering can be added
     // later with a dedicated PDF service or a Node/Docker rendering service.
+    if (!blackAndWhite) toast.info("For color printouts, enable Background graphics in the browser print dialog.");
     window.print();
   }
 
@@ -32,13 +31,6 @@ export function PrintToolbar({
           <h1 className="text-lg font-semibold text-foreground">ChoirScript</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex min-h-9 items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-2 text-sm font-medium text-foreground">
-            <Switch
-              checked={blackAndWhite}
-              onCheckedChange={onBlackAndWhiteChange}
-            />
-            Simple B&W
-          </label>
           <Button render={<Link href={`/songs/${songId}`} />} variant="outline">
             Back to Editor
           </Button>
@@ -47,13 +39,10 @@ export function PrintToolbar({
             onClick={handlePrint}
           >
             <Printer data-icon="inline-start" />
-            {blackAndWhite ? "Print Simple PDF" : "Color PDF / Print"}
+            {blackAndWhite ? "Print black and white" : "Preview & Print"}
           </Button>
         </div>
       </div>
-      <p className="mx-auto mt-2 max-w-[900px] text-xs text-muted-foreground">
-        For colorful PDFs, enable Background graphics in the browser print dialog if needed.
-      </p>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Copy, Ellipsis, Eye, Printer, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Ellipsis, Eye, Share2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Song } from "@/lib/songTypes";
 import { useWorkspaceSongs } from "./WorkspaceSongsContext";
@@ -49,6 +49,8 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
     }
   }
 
+  const saveLabel = saveStatus === "saving" ? "Saving…" : saveStatus === "failed" ? "Save failed" : saveStatus === "dirty" ? "Unsaved changes" : "Saved";
+
   return (
     <div className="min-h-svh overflow-x-clip bg-background text-foreground">
       <header className="no-print sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
@@ -56,7 +58,7 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
           <Button render={<Link href="/" />} variant="ghost" size="icon-sm" aria-label="Back to workspace"><ArrowLeft /></Button>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{song?.title || "Untitled Song"}</p>
-            <div className="flex items-center gap-2"><Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{saveStatus}</Badge><span className="hidden text-xs text-muted-foreground sm:inline">Autosaved</span></div>
+            <div className="flex items-center gap-2"><Badge variant={saveStatus === "failed" ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]">{saveLabel}</Badge></div>
           </div>
           {song ? <nav className="hidden items-center gap-1 md:flex" aria-label="Editor views">
             <Button render={<Link href={`/songs/${song.id}?view=lyrics`} />} variant={activeView === "lyrics" ? "secondary" : "ghost"} size="sm">Lyrics</Button>
@@ -65,9 +67,8 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
           <div className="ml-auto flex items-center gap-1">
             {song ? <>
               <Button render={<Link href={`/songs/${song.id}/rehearsal`} />} size="sm" className="gap-1.5 bg-primary text-primary-foreground shadow-sm"><Eye /><span className="hidden sm:inline">Rehearsal</span></Button>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setIsShareOpen(true)} aria-label="Share"><Share2 /></Button>
-              <Button render={<Link href={`/songs/${song.id}/rehearsal`} />} variant="ghost" size="icon-sm" aria-label="Print"><Printer /></Button>
-              <Button type="button" variant="ghost" size="icon-sm" onClick={handleDuplicate} aria-label="Duplicate"><Copy /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setIsShareOpen(true)} aria-label="Share" title="Share"><Share2 /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={handleDuplicate} aria-label="Duplicate song" title="Duplicate song"><Copy /></Button>
               <DropdownMenu>
                 <DropdownMenuTrigger render={<Button type="button" variant="ghost" size="icon-sm" aria-label="More actions" />}><Ellipsis /></DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

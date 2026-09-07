@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { normalizeSong } from "@/lib/songStorage";
-import { songHasBass } from "@/lib/songSelection";
+import { getEnabledVoiceParts, songHasPartEntries } from "@/lib/songSelection";
 import { getSong } from "@/lib/firebase/songs";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import type { Song } from "@/lib/songTypes";
@@ -19,8 +19,10 @@ type RehearsalViewProps = {
   songId: string;
 };
 
+type DisplayToggleKey = Exclude<keyof RehearsalDisplayToggles, "enabledParts">;
+
 const toggleLabels: Array<{
-  key: keyof RehearsalDisplayToggles;
+  key: DisplayToggleKey;
   label: string;
 }> = [
   { key: "soprano", label: "Show Soprano" },
@@ -30,7 +32,7 @@ const toggleLabels: Array<{
   { key: "techniques", label: "Show Techniques" },
   { key: "directorNotes", label: "Show Director Notes" },
   { key: "largeText", label: "Large Text Mode" },
-  { key: "blackAndWhite", label: "Simple black-and-white print" },
+  { key: "blackAndWhite", label: "Black and white print" },
 ];
 
 export function RehearsalView({ songId }: RehearsalViewProps) {
@@ -48,6 +50,7 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
     directorNotes: true,
     largeText: false,
     blackAndWhite: false,
+    enabledParts: ["soprano", "alto", "tenor"],
   });
 
   useEffect(() => {
@@ -69,7 +72,15 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
           // Canonical sanitizer/migration boundary before render state.
           const normalizedSong = normalizeSong(cloudSong);
           setSong(normalizedSong);
-          setToggles((current) => ({ ...current, bass: normalizedSong.bassEnabled || songHasBass(normalizedSong) }));
+          const enabledParts = getEnabledVoiceParts(normalizedSong);
+          setToggles((current) => ({
+            ...current,
+            enabledParts,
+            soprano: songHasPartEntries(normalizedSong, "soprano"),
+            alto: songHasPartEntries(normalizedSong, "alto"),
+            tenor: songHasPartEntries(normalizedSong, "tenor"),
+            bass: enabledParts.includes("bass") && songHasPartEntries(normalizedSong, "bass"),
+          }));
         }
         setLoaded(true);
       })
@@ -136,26 +147,18 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
 
   return (
     <main className="min-h-screen overflow-x-clip bg-background text-foreground">
-      <PrintToolbar
-        songId={song.id}
-        blackAndWhite={toggles.blackAndWhite}
-        onBlackAndWhiteChange={(blackAndWhite) =>
-          setToggles((current) => ({ ...current, blackAndWhite }))
-        }
-      />
+      <PrintToolbar songId={song.id} blackAndWhite={toggles.blackAndWhite} />
       <div className="no-print mx-auto max-w-[900px] px-3 py-4 sm:px-5">
-        <section className="rounded-2xl border border-border bg-card p-3 shadow-sm sm:p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Display and export
-          </h2>
+        <details className="rounded-2xl border border-border bg-card p-3 sm:p-4">
+          <summary className="cursor-pointer list-none text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">Display &amp; Print</summary>
           <div className="mt-3 flex flex-wrap gap-2">
-            {toggleLabels.filter((toggle) => toggle.key !== "bass" || Boolean(song.bassEnabled || songHasBass(song))).map((toggle) => (
+            {toggleLabels.filter((toggle) => !["soprano", "alto", "tenor", "bass"].includes(toggle.key) || toggles.enabledParts.includes(toggle.key as "soprano" | "alto" | "tenor" | "bass")).map((toggle) => (
               <label
                 key={toggle.key}
                 className="flex min-h-11 items-center gap-2 rounded-full border border-border bg-background px-3 py-2.5 text-sm font-medium text-foreground"
               >
                 <Switch
-                  checked={toggles[toggle.key]}
+                  checked={toggles[toggle.key] as boolean}
                   onCheckedChange={(checked) =>
                     setToggles((current) => ({
                       ...current,
@@ -167,11 +170,8 @@ export function RehearsalView({ songId }: RehearsalViewProps) {
               </label>
             ))}
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">
-            Color PDF export uses browser print backgrounds. Enable Background graphics in the
-            print dialog if highlights do not appear.
-          </p>
-        </section>
+          <p className="mt-3 text-xs text-muted-foreground">Voice switches start with voices that contain entries, and can be turned on when needed.</p>
+        </details>
       </div>
 
       {song.mode === "advanced" ? (

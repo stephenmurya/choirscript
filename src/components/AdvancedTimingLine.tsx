@@ -44,6 +44,7 @@ type AdvancedTimingLineProps = {
   lineTiming: LineTiming;
   settings: SongTimingSettings;
   includeBass: boolean;
+  enabledParts?: PartKey[];
   timingScope: TimingScope;
   onLineTimingChange: (lineTiming: LineTiming) => void;
   onPartCueChange: (
@@ -194,6 +195,7 @@ export function AdvancedTimingLine({
   lineTiming,
   settings,
   includeBass,
+  enabledParts,
   timingScope,
   onLineTimingChange,
   onPartCueChange,
@@ -222,7 +224,7 @@ export function AdvancedTimingLine({
     }
   });
 
-  const rows = PART_LABELS.filter((part) => includeBass || part.key !== "bass");
+  const rows = PART_LABELS.filter((part) => enabledParts ? enabledParts.includes(part.key) : includeBass || part.key !== "bass");
   const voiceStartRow = 5;
 
   function updateLine(nextLineTiming: LineTiming) {

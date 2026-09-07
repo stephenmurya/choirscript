@@ -27,6 +27,7 @@ type LyricLineBlockProps = {
   line: SongLine;
   lineIndex: number;
   includeBass: boolean;
+  enabledParts?: PartKey[];
   showParts?: boolean;
   selection: LyricSelection;
   onSelectionChange: (selection: NonNullable<LyricSelection>, menuPosition?: MenuPosition) => void;
@@ -36,6 +37,7 @@ type LyricLineBlockProps = {
     wordId: string,
     syllables: string[],
   ) => void;
+  onRestoreWordSyllables?: (sectionId: string, lineId: string, wordId: string) => void;
   onPartCueChange: (
     sectionId: string,
     lineId: string,
@@ -57,15 +59,18 @@ export function LyricLineBlock({
   line,
   lineIndex,
   includeBass,
+  enabledParts,
   showParts = true,
   selection,
   onSelectionChange,
   onUpdateWordSyllables,
+  onRestoreWordSyllables,
   onPartCueChange,
   onRemoveTechnique,
   onDuplicateLine,
 }: LyricLineBlockProps) {
   const [editingWord, setEditingWord] = useState<EditingWord | null>(null);
+  const [splitPosition, setSplitPosition] = useState(1);
   const dragStartIdRef = useRef<string | null>(null);
   const isDraggingRef = useRef(false);
   const flatSyllables = flattenLineSyllables(line);
@@ -190,6 +195,7 @@ export function LyricLineBlock({
                     word: flat.word,
                     value: flat.word.syllables.map((syllable) => syllable.text).join("-"),
                   });
+                  setSplitPosition(Math.max(1, Math.floor(flat.word.originalWord.length / 2)));
                 }}
                 className={`min-h-8 w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-2 text-center text-[0.96rem] font-medium leading-none text-foreground transition focus:outline-none focus:ring-2 focus:ring-ring ${
                   technique
@@ -222,6 +228,7 @@ export function LyricLineBlock({
               lineIndex={lineIndex}
               syllables={flatSyllables}
               includeBass={includeBass}
+              enabledParts={enabledParts}
               gridStartRow={voiceStartRow}
               onPartCueChange={(syllableId, part, value) =>
                 onPartCueChange(sectionId, line.id, syllableId, part, value)
@@ -270,6 +277,11 @@ export function LyricLineBlock({
             >
               Cancel
             </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
+            <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted" onClick={() => onUpdateWordSyllables(sectionId, line.id, editingWord.word.id, [editingWord.word.originalWord])}>Merge syllables</button>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">Split at <input type="number" min={1} max={Math.max(1, editingWord.word.originalWord.length - 1)} value={splitPosition} onChange={(event) => setSplitPosition(Number(event.target.value))} className="h-7 w-14 rounded-md border border-border bg-background px-2 text-foreground" /> <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 font-medium text-foreground transition hover:bg-muted" onClick={() => { const position = Math.max(1, Math.min(editingWord.word.originalWord.length - 1, splitPosition)); onUpdateWordSyllables(sectionId, line.id, editingWord.word.id, [editingWord.word.originalWord.slice(0, position), editingWord.word.originalWord.slice(position)]); }}>Split</button></label>
+            {onRestoreWordSyllables ? <button type="button" className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted" onClick={() => { onRestoreWordSyllables(sectionId, line.id, editingWord.word.id); setEditingWord(null); }}>Restore automatic</button> : null}
           </div>
         </form>
       ) : null}

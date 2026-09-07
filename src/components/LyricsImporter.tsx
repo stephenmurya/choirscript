@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 type LyricsImporterProps = {
-  onGenerate: (lyrics: string) => void;
+  onReview: (lyrics: string) => void;
 };
 
-export function LyricsImporter({ onGenerate }: LyricsImporterProps) {
+export function LyricsImporter({ onReview }: LyricsImporterProps) {
   const [lyrics, setLyrics] = useState("");
   const [fileMessage, setFileMessage] = useState("");
 
@@ -53,22 +53,12 @@ export function LyricsImporter({ onGenerate }: LyricsImporterProps) {
           />
         </label>
         {fileMessage ? <p className="mt-2 text-xs text-muted-foreground">{fileMessage}</p> : null}
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-          <span className="rounded-full border border-border bg-background px-2 py-1">
-            Import .docx (TODO)
-          </span>
-          <span className="rounded-full border border-border bg-background px-2 py-1">
-            Import .pdf (TODO)
-          </span>
-        </div>
-        {/* TODO: Add DOCX/PDF parsing later with dedicated client-safe parsers. */}
       </div>
       <Button
         type="button"
         disabled={!lyrics.trim()}
         onClick={() => {
-          onGenerate(lyrics);
-          setLyrics("");
+          onReview(lyrics);
         }}
         className="mt-3 w-full"
       >

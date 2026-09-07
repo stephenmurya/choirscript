@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AdvancedTimingRehearsalView } from "@/components/AdvancedTimingRehearsalView";
 import { ColorfulRehearsalView, type RehearsalDisplayToggles } from "@/components/ColorfulRehearsalView";
 import { SharedPageActions } from "@/components/SharedPageActions";
+import { formatTempo } from "@/lib/songDisplay";
+import { getEnabledVoiceParts } from "@/lib/songSelection";
 
 type SharedSongPageProps = {
   params: Promise<{ shareId: string }>;
@@ -22,6 +24,7 @@ const sharedToggles: RehearsalDisplayToggles = {
   directorNotes: true,
   largeText: false,
   blackAndWhite: false,
+  enabledParts: ["soprano", "alto", "tenor", "bass"],
 };
 
 function metadataLine(payload: Awaited<ReturnType<typeof getSharedSong>>) {
@@ -32,7 +35,7 @@ function metadataLine(payload: Awaited<ReturnType<typeof getSharedSong>>) {
   return [
     payload.artist ? `Singer: ${payload.artist}` : null,
     payload.key ? `Key: ${payload.key}` : null,
-    payload.bpm ? `BPM: ${payload.bpm}` : null,
+    formatTempo(payload.bpm) || null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -105,6 +108,7 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
   }
 
   const song = payload.song;
+  const sharedViewToggles = { ...sharedToggles, enabledParts: getEnabledVoiceParts(song) };
 
   return (
     <main className="min-h-svh overflow-x-clip bg-background text-foreground">
@@ -137,9 +141,9 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
       </header>
 
       {song.mode === "advanced" ? (
-        <AdvancedTimingRehearsalView song={song} toggles={sharedToggles} />
+        <AdvancedTimingRehearsalView song={song} toggles={sharedViewToggles} />
       ) : (
-        <ColorfulRehearsalView song={song} toggles={sharedToggles} />
+        <ColorfulRehearsalView song={song} toggles={sharedViewToggles} />
       )}
     </main>
   );

@@ -15,6 +15,7 @@ import { TechniqueLegend } from "./TechniqueLegend";
 import { TimingGrid } from "./TimingGrid";
 import { TimingLegend } from "./TimingLegend";
 import type { RehearsalDisplayToggles } from "./ColorfulRehearsalView";
+import { formatTempo } from "@/lib/songDisplay";
 
 function flattenLineSyllables(line: SongLine) {
   return line.words.flatMap((word) => word.syllables);
@@ -123,11 +124,7 @@ function RehearsalTimingLine({
     (a, b) => getEventAbsoluteStart(a, lineTiming.bars) - getEventAbsoluteStart(b, lineTiming.bars),
   );
   const rows = PART_LABELS.filter((part) => {
-    if (part.key === "bass") {
-      return toggles.bass;
-    }
-
-    return toggles[part.key];
+    return toggles.enabledParts.includes(part.key) && toggles[part.key];
   });
   const partRowStart = 5;
 
@@ -277,7 +274,7 @@ export function AdvancedTimingRehearsalView({
         </p>
         <h1 className="rehearsal-title mt-2 text-foreground">{song.title || "Untitled Song"}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {[song.artist ? `Singer: ${song.artist}` : null, song.key ? `Key: ${song.key}` : null, song.tempo ? `BPM: ${song.tempo}` : null]
+          {[song.artist ? `Singer: ${song.artist}` : null, song.key ? `Key: ${song.key}` : null, formatTempo(song.tempo) ? formatTempo(song.tempo) : null]
             .filter(Boolean)
             .join(", ")}
         </p>
@@ -291,7 +288,7 @@ export function AdvancedTimingRehearsalView({
       </header>
 
       <div className="mb-8 flex flex-col gap-4">
-        {toggles.techniques ? <TechniqueLegend /> : null}
+        {toggles.techniques ? <TechniqueLegend song={song} /> : null}
         <TimingLegend />
       </div>
 
@@ -299,6 +296,8 @@ export function AdvancedTimingRehearsalView({
         {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
           <section
             key={renderIdentity}
+            id={`rehearsal-${renderIdentity}`}
+            data-rehearsal-section="true"
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
             <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>

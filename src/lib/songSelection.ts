@@ -1,4 +1,4 @@
-import type { Song, SongLine, SongSection, SyllableToken, WordToken } from "./songTypes";
+import type { Song, SongLine, SongSection, SyllableToken, VocalPart, WordToken, VoicePreset } from "./songTypes";
 
 export type SyllableSelectionContext = {
   section: SongSection;
@@ -45,4 +45,33 @@ export function songHasBass(song: Song) {
       ),
     ),
   );
+}
+
+export const VOICE_PRESET_LABELS: Record<VoicePreset, string> = {
+  satb: "SATB",
+  sab: "SAB",
+  ssa: "SSA",
+  ttbb: "TTBB",
+  unison: "Unison",
+  custom: "Custom",
+};
+
+export const VOICE_PRESET_PARTS: Record<Exclude<VoicePreset, "custom">, VocalPart[]> = {
+  satb: ["soprano", "alto", "tenor", "bass"],
+  sab: ["soprano", "alto", "bass"],
+  ssa: ["soprano", "alto"],
+  ttbb: ["tenor", "bass"],
+  unison: ["soprano"],
+};
+
+export function getEnabledVoiceParts(song: Song): VocalPart[] {
+  if (song.enabledParts?.length) return song.enabledParts;
+  if (song.voicePreset && song.voicePreset !== "custom") return VOICE_PRESET_PARTS[song.voicePreset];
+  return song.bassEnabled || songHasBass(song)
+    ? ["soprano", "alto", "tenor", "bass"]
+    : ["soprano", "alto", "tenor"];
+}
+
+export function songHasPartEntries(song: Song, part: VocalPart) {
+  return song.source.sections.some((section) => section.lines.some((line) => line.words.some((word) => word.syllables.some((syllable) => Boolean(syllable[part]?.trim())))));
 }

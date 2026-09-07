@@ -99,6 +99,8 @@ export function createEmptySong(): Song {
     notes: "",
     mode: "simple",
     bassEnabled: false,
+    voicePreset: "custom",
+    enabledParts: ["soprano", "alto", "tenor"],
     source: { sections: [] },
     arrangements: [arrangement],
     activeArrangementId: arrangement.id,
@@ -220,6 +222,8 @@ export function createSampleSong(): Song {
     notes: "Teach the melody by call-and-response, then add harmony cues one line at a time.",
     mode: "simple",
     bassEnabled: false,
+    voicePreset: "custom",
+    enabledParts: ["soprano", "alto", "tenor"],
     source: { sections: [section] },
     arrangements: [arrangement],
     activeArrangementId: arrangement.id,
@@ -390,6 +394,12 @@ export function normalizeSong(input: Song): Song {
         : sourceHasBass,
     arrangements,
     activeArrangementId,
+    voicePreset: normalizedSong.voicePreset ?? "custom",
+    enabledParts: normalizedSong.enabledParts?.length
+      ? normalizedSong.enabledParts
+      : normalizedSong.bassEnabled || sourceHasBass
+        ? ["soprano", "alto", "tenor", "bass"]
+        : ["soprano", "alto", "tenor"],
   };
 
   return withArrangements.mode === "advanced"

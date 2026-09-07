@@ -1,19 +1,35 @@
-import { getActiveArrangement, normalizeRepeatCount } from "@/lib/arrangement";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { ListMusic } from "lucide-react";
+import { resolveArrangement } from "@/lib/arrangement";
 import type { Song } from "@/lib/songTypes";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 export function ArrangementRoadmap({ song }: { song: Song }) {
-  const arrangement = getActiveArrangement(song);
-  const rows = arrangement?.occurrences.flatMap((occurrence) => {
-    const section = song.source.sections.find((candidate) => candidate.id === occurrence.sourceSectionId);
-    return section ? [{ occurrence, section }] : [];
-  }) ?? [];
+  const rows = useMemo(() => resolveArrangement(song), [song]);
+  const [activeId, setActiveId] = useState(rows[0] ? `rehearsal-${rows[0].renderIdentity}` : "");
 
-  const content = (
-    <div className="space-y-2">
-      <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Roadmap</p><p className="mt-1 text-xs text-muted-foreground">Performance order</p></div>
-      {rows.length ? <ol className="space-y-1.5">{rows.map(({ occurrence, section }, index) => { const repeatCount = normalizeRepeatCount(occurrence.repeatCount); return <li key={occurrence.id} className="flex items-center gap-2 rounded-lg bg-muted/30 px-2.5 py-2 text-sm"><span className="w-4 text-[11px] text-muted-foreground">{index + 1}</span><span className="min-w-0 flex-1 truncate font-medium">{section.name}</span>{repeatCount > 1 ? <span className="text-xs text-muted-foreground">×{repeatCount}</span> : null}</li>; })}</ol> : <p className="text-xs text-muted-foreground">Source order</p>}
-    </div>
-  );
+  useEffect(() => {
+    const sections = rows
+      .map((row) => document.getElementById(`rehearsal-${row.renderIdentity}`))
+      .filter(Boolean) as HTMLElement[];
+    if (sections.length === 0) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible[0]?.target.id) setActiveId(visible[0].target.id);
+    }, { rootMargin: "-5rem 0px -65% 0px", threshold: [0, 0.1, 0.5] });
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [rows]);
 
-  return <><details className="no-print mb-5 rounded-xl border border-border bg-card p-3 lg:hidden"><summary className="cursor-pointer list-none text-sm font-semibold">Arrangement roadmap</summary><div className="pt-3">{content}</div></details><aside className="no-print hidden self-start lg:sticky lg:top-20 lg:block lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">{content}</aside></>;
+  function jumpTo(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveId(id);
+  }
+
+  const content = <div className="space-y-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Roadmap</p><p className="mt-1 text-xs text-muted-foreground">Performance order</p></div>{rows.length ? <ol className="space-y-1.5" aria-label="Rehearsal roadmap">{rows.map(({ section, repeatIndex, renderIdentity }, index) => { const id = `rehearsal-${renderIdentity}`; const label = repeatIndex > 0 ? `${section.name} · repeat ${repeatIndex + 1}` : section.name; return <li key={renderIdentity}><Button type="button" variant="ghost" className={`h-auto min-h-9 w-full justify-start gap-2 px-2.5 py-2 text-left text-sm ${activeId === id ? "bg-primary/10 text-foreground" : "text-muted-foreground"}`} onClick={() => jumpTo(id)}><span className="w-5 shrink-0 text-[11px]">{index + 1}</span><span className="min-w-0 truncate font-medium">{label}</span></Button></li>; })}</ol> : <p className="text-xs text-muted-foreground">No sections yet.</p>}</div>;
+
+  return <><div className="no-print mb-5 lg:hidden"><Sheet><SheetTrigger render={<Button type="button" variant="outline" className="w-full justify-between" />}><span className="flex items-center gap-2"><ListMusic className="size-4" />Roadmap</span><span className="text-xs text-muted-foreground">{rows.length} sections</span></SheetTrigger><SheetContent side="right" className="w-[min(92vw,24rem)] overflow-y-auto p-5"><SheetHeader className="p-0 pb-5"><SheetTitle>Rehearsal roadmap</SheetTitle><SheetDescription>Jump through the performance order.</SheetDescription></SheetHeader>{content}</SheetContent></Sheet></div><aside className="no-print hidden self-start lg:sticky lg:top-[4.75rem] lg:block lg:max-h-[calc(100svh-5.25rem)] lg:overflow-y-auto">{content}</aside></>;
 }
