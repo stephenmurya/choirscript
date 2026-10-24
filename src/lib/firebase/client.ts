@@ -1,5 +1,5 @@
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, getRedirectResult, type Auth, type User } from "firebase/auth";
 import { initializeFirestore, type Firestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -62,6 +62,7 @@ export async function getFirebaseAuth(): Promise<Auth> {
 
 let cachedAuth: Auth | null = null;
 let authReadyPromise: Promise<Auth> | null = null;
+let redirectResultPromise: Promise<User | null> | null = null;
 
 /** Begin (or join) Firebase Auth initialization; resolves with the Auth instance. */
 export function ensureFirebaseAuthReady(): Promise<Auth> {
@@ -82,6 +83,17 @@ export function ensureFirebaseAuthReady(): Promise<Auth> {
  */
 export function getInitializedFirebaseAuth(): Auth | null {
   return cachedAuth;
+}
+
+/** Complete a pending OAuth redirect after Firebase returns to ChoirScript. */
+export function completeFirebaseRedirectSignIn(): Promise<User | null> {
+  if (!redirectResultPromise) {
+    redirectResultPromise = ensureFirebaseAuthReady()
+      .then((auth) => getRedirectResult(auth))
+      .then((credential) => credential?.user ?? null);
+  }
+
+  return redirectResultPromise;
 }
 
 export async function getFirebaseFirestore(): Promise<Firestore> {

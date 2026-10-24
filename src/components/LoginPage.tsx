@@ -12,9 +12,11 @@ import {
   signUpWithEmail,
 } from "@/lib/firebase/auth";
 import {
+  completeFirebaseRedirectSignIn,
   ensureFirebaseAuthReady,
   getInitializedFirebaseAuth,
 } from "@/lib/firebase/client";
+import { useAuth } from "@/lib/firebase/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,6 +29,7 @@ const initialState = { email: "", password: "", displayName: "" };
 
 export function LoginPage() {
   const router = useRouter();
+  const { status } = useAuth();
   const [mode, setMode] = useState<LoginMode>("signin");
   const [form, setForm] = useState(initialState);
   const [isBusy, setIsBusy] = useState(false);
@@ -67,6 +70,36 @@ export function LoginPage() {
       cancelled = true;
     };
   }, [isAuthReady]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    completeFirebaseRedirectSignIn()
+      .then((redirectUser) => {
+        if (!cancelled && redirectUser) {
+          router.replace("/");
+        }
+      })
+      .catch((error) => {
+        console.error("Google redirect sign-in failed", error);
+        if (!cancelled) {
+          toast.error(describeAuthError(error));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  // Popup sign-in navigates explicitly below. Redirect sign-in returns to
+  // this page first, so continue into the workspace once Firebase restores
+  // the authenticated session.
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/");
+    }
+  }, [router, status]);
 
   function updateField(field: keyof typeof initialState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -247,6 +280,24 @@ export function LoginPage() {
             </div>
           </CardContent>
         </Card>
+
+        <p className="mx-auto mt-5 max-w-sm text-center text-xs leading-5 text-muted-foreground">
+          By continuing, you agree to the{" "}
+          <Link
+            href="/terms"
+            className="font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+          >
+            Terms of Service
+          </Link>{" "}
+          and acknowledge the{" "}
+          <Link
+            href="/privacy"
+            className="font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
+          >
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </div>
     </main>
   );

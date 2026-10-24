@@ -3,6 +3,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   sendPasswordResetEmail,
   signOut,
   updateProfile,
@@ -243,7 +244,8 @@ export async function bootstrapUserWorkspace(user: User): Promise<AuthResult> {
 export { describeFirestoreErrorCode };
 
 /**
- * Google popup sign-in.
+ * Google sign-in. Uses a popup when the browser permits it, then falls back
+ * to a same-tab redirect when popup blocking is enabled for the site.
  *
  * REQUIRES the caller to have awaited ensureFirebaseAuthReady() beforehand
  * (AuthProvider does this at mount, and LoginPage gates the Google button on
@@ -268,13 +270,18 @@ export function signInWithGoogle(): Promise<User> {
   return signInWithPopup(auth, provider)
     .then((credential) => credential.user)
     .catch((error) => {
-    // TEMPORARY (production diagnostics): log the raw Firebase code so
-    // auth/popup-blocked vs auth/unauthorized-domain vs
-    // auth/popup-closed-by-user is distinguishable in the deployed console.
-    // Remove once the sign-in issue is resolved. No tokens/secrets are logged.
-    console.error(`[google-signin] ${describeAuthErrorCode(error)}`, error);
-    throw error;
-  });
+      const code = describeAuthErrorCode(error);
+
+      // A redirect does not require a popup permission. Firebase restores the
+      // session after returning to ChoirScript and onAuthStateChanged handles
+      // the signed-in user as usual.
+      if (code === "auth/popup-blocked") {
+        return signInWithRedirect(auth, provider);
+      }
+
+      console.error(`[google-signin] ${code}`, error);
+      throw error;
+    });
 }
 
 export async function signInWithEmail(email: string, password: string): Promise<User> {
