@@ -1,5 +1,6 @@
 import { createSyllableToken, createWordToken } from "@/lib/songStorage";
 import { splitWordIntoSyllables } from "@/lib/syllableSplitter";
+import { normalizeWordKey } from "@/lib/syllableDictionary";
 import type { LineTiming, Song, SongLine, SyllableToken, WordToken } from "@/lib/songTypes";
 
 function wordsFromText(text: string) {
@@ -40,15 +41,34 @@ function longestCommonSubsequence(existing: WordToken[], nextWords: string[]) {
   return matches;
 }
 
+const WORD_SURFACE_PATTERN = /^([^\p{L}\p{N}'’]*)([\p{L}\p{N}'’]+)([^\p{L}\p{N}]*)$/u;
+
 function updateWordSurface(word: WordToken, nextText: string): WordToken {
-  const nextMatch = nextText.match(/^([^A-Za-z0-9'’]*)([A-Za-z0-9'’]+)([^A-Za-z0-9]*)$/);
-  if (!nextMatch || word.syllables.length === 1) {
+  const nextMatch = nextText.match(WORD_SURFACE_PATTERN);
+
+  if (!nextMatch) {
+    // Unmatched surface (emoji-only or symbols): rebuild from the splitter
+    // rather than stamping every syllable with the whole word, which used to
+    // collapse accented/non-Latin words into duplicate tokens.
+    const pieces = splitWordIntoSyllables(nextText);
+    return {
+      ...word,
+      originalWord: nextText,
+      syllables: pieces.map((text, index) =>
+        word.syllables[index]
+          ? { ...word.syllables[index], text }
+          : createSyllableToken(text),
+      ),
+    };
+  }
+
+  if (word.syllables.length === 1) {
     return { ...word, originalWord: nextText, syllables: word.syllables.map((syllable) => ({ ...syllable, text: nextText })) };
   }
 
   const [, leading, , trailing] = nextMatch;
   const syllables = word.syllables.map((syllable, index) => {
-    const text = syllable.text.replace(/^[^A-Za-z0-9'’]*/, "").replace(/[^A-Za-z0-9'’]*$/, "");
+    const text = syllable.text.replace(/^[^\p{L}\p{N}'’]*/u, "").replace(/[^\p{L}\p{N}'’]*$/u, "");
     return {
       ...syllable,
       text: `${index === 0 ? leading : ""}${text}${index === word.syllables.length - 1 ? trailing : ""}`,
@@ -119,4 +139,93 @@ export function preparePendingSyllabification(song: Song): { song: Song; changed
     })),
   }));
   return changed ? { song: { ...song, source: { sections } }, changed } : { song, changed };
+}
+
+export type WordSyllableTarget = {
+  sectionId: string;
+  lineId: string;
+  wordId: string;
+};
+
+/**
+ * Apply an explicit syllable split to one word, or to every word in the song
+ * that reads the same (case-insensitive), which is what the editor's "apply to
+ * every occurrence" toggle asks for. Syllable IDs are preserved by position so
+ * part cues and techniques attached to them survive the edit; annotations that
+ * pointed at syllables the split removed are pruned per touched line.
+ */
+export function applyWordSyllables(
+  song: Song,
+  target: WordSyllableTarget,
+  pieces: string[],
+  options: { everywhere?: boolean; syllabification?: "auto" | "manual" } = {},
+): { song: Song; matchedWords: number; matchedLines: number } {
+  if (pieces.length === 0) {
+    return { song, matchedWords: 0, matchedLines: 0 };
+  }
+
+  const targetWord = song.source.sections
+    .find((section) => section.id === target.sectionId)
+    ?.lines.find((line) => line.id === target.lineId)
+    ?.words.find((word) => word.id === target.wordId);
+
+  if (!targetWord) {
+    return { song, matchedWords: 0, matchedLines: 0 };
+  }
+
+  const key = normalizeWordKey(targetWord.originalWord);
+  const everywhere = Boolean(options.everywhere);
+  const nextSyllabification = options.syllabification ?? "manual";
+  let matchedWords = 0;
+  let matchedLines = 0;
+
+  const sections = song.source.sections.map((section) => ({
+    ...section,
+    lines: section.lines.map((line) => {
+      let lineMatches = 0;
+
+      const words = line.words.map((word) => {
+        const isTarget =
+          section.id === target.sectionId && line.id === target.lineId && word.id === target.wordId;
+        const matches = isTarget || (everywhere && normalizeWordKey(word.originalWord) === key);
+
+        if (!matches) {
+          return word;
+        }
+
+        lineMatches += 1;
+
+        return {
+          ...word,
+          syllabification: nextSyllabification,
+          syllables: pieces.map((text, index) => {
+            const existing = word.syllables[index];
+            return existing ? { ...existing, text } : createSyllableToken(text);
+          }),
+        };
+      });
+
+      if (lineMatches === 0) {
+        return line;
+      }
+
+      matchedWords += lineMatches;
+      matchedLines += 1;
+
+      const validSyllableIds = new Set(words.flatMap((word) => word.syllables.map((syllable) => syllable.id)));
+
+      return {
+        ...line,
+        words,
+        annotations: line.annotations
+          .map((annotation) => ({
+            ...annotation,
+            syllableIds: annotation.syllableIds.filter((id) => validSyllableIds.has(id)),
+          }))
+          .filter((annotation) => annotation.syllableIds.length > 0),
+      };
+    }),
+  }));
+
+  return { song: { ...song, source: { sections } }, matchedWords, matchedLines };
 }

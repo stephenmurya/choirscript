@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Copy, Pencil, Trash2 } from "lucide-react";
 import { AdvancedTimingLine } from "./AdvancedTimingLine";
 import { LyricLineBlock } from "./LyricLineBlock";
+import { PartTransferMenu } from "./PartTransferMenu";
+import type { PartTransferMode } from "@/lib/partTransfer";
 import { PlainLyricsEditor } from "./PlainLyricsEditor";
 import { SlashCommandLine } from "./SlashCommandLine";
 import { TechniqueContextMenu } from "./TechniqueContextMenu";
@@ -85,6 +87,19 @@ type DocumentScriptEditorProps = {
     value: string,
   ) => void;
   onDuplicateLine: (sectionId: string, lineId: string) => void;
+  onTransferLinePart: (
+    sectionId: string,
+    lineId: string,
+    from: VocalPart,
+    to: VocalPart,
+    mode: PartTransferMode,
+  ) => void;
+  onTransferSectionPart: (
+    sectionId: string,
+    from: VocalPart,
+    to: VocalPart,
+    mode: PartTransferMode,
+  ) => void;
   onUpdateLineText: (sectionId: string, lineId: string, text: string) => void;
   onInsertLyrics: (sectionId: string, lineId: string, text: string) => void;
   onCreateLineAfter: (sectionId: string, lineId: string) => string;
@@ -127,6 +142,8 @@ export function DocumentScriptEditor({
   onRestoreWordSyllables,
   onPartCueChange,
   onDuplicateLine,
+  onTransferLinePart,
+  onTransferSectionPart,
   onUpdateLineText,
   onInsertLyrics,
   onCreateLineAfter,
@@ -345,6 +362,11 @@ export function DocumentScriptEditor({
                   }}
                   className="document-section-title min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground focus:text-foreground"
                 />
+                <PartTransferMenu
+                  scope="section"
+                  enabledParts={enabledParts}
+                  onTransfer={(from, to, mode) => onTransferSectionPart(section.id, from, to, mode)}
+                />
                 <button
                   type="button"
                   onClick={() => onDeleteSection(section.id)}
@@ -402,6 +424,9 @@ export function DocumentScriptEditor({
                     onPartCueChange={onPartCueChange}
                     onRemoveTechnique={onRemoveTechnique}
                     onDuplicateLine={(lineId) => onDuplicateLine(section.id, lineId)}
+                    onTransferLinePart={(from, to, mode) =>
+                      onTransferLinePart(section.id, line.id, from, to, mode)
+                    }
                   />
                 );
               })}

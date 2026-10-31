@@ -12,13 +12,14 @@ import {
   createLineFromText,
   duplicateLine,
   deleteLine,
-  createSyllableToken,
   normalizeSong,
 } from "@/lib/songStorage";
 import { getEnabledVoiceParts } from "@/lib/songSelection";
 import { parseLyricsInput } from "@/lib/lyricsParser";
-import { preparePendingSyllabification, reconcileLineText, reconcileLineTiming } from "@/lib/lineText";
-import { splitWordIntoSyllables } from "@/lib/syllableSplitter";
+import { applyWordSyllables, preparePendingSyllabification, reconcileLineText, reconcileLineTiming } from "@/lib/lineText";
+import { splitWordIntoSyllablesWithPatterns } from "@/lib/syllableSplitter";
+import { transferLinePart, transferSectionPart } from "@/lib/partTransfer";
+import type { PartTransferMode } from "@/lib/partTransfer";
 import {
   appendOccurrence,
   countOccurrencesForSection,
@@ -529,6 +530,48 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => duplicateLine(current, sectionId, lineId));
   }
 
+  function handleTransferLinePart(
+    sectionId: string,
+    lineId: string,
+    from: VocalPart,
+    to: VocalPart,
+    mode: PartTransferMode,
+  ) {
+    updateSong((current) => ({
+      ...current,
+      source: {
+        ...current.source,
+        sections: current.source.sections.map((section) =>
+          section.id === sectionId
+            ? {
+                ...section,
+                lines: section.lines.map((line) =>
+                  line.id === lineId ? transferLinePart(line, from, to, mode) : line,
+                ),
+              }
+            : section,
+        ),
+      },
+    }));
+  }
+
+  function handleTransferSectionPart(
+    sectionId: string,
+    from: VocalPart,
+    to: VocalPart,
+    mode: PartTransferMode,
+  ) {
+    updateSong((current) => ({
+      ...current,
+      source: {
+        ...current.source,
+        sections: current.source.sections.map((section) =>
+          section.id === sectionId ? transferSectionPart(section, from, to, mode) : section,
+        ),
+      },
+    }));
+  }
+
   function lineHasMusicalData(line: Song["source"]["sections"][number]["lines"][number]) {
     return line.annotations.length > 0 || line.words.some((word) => word.syllables.some((syllable) => Boolean(syllable.soprano || syllable.alto || syllable.tenor || syllable.bass || syllable.directorNote || syllable.techniques.length)));
   }
@@ -627,62 +670,27 @@ export function SongEditor({ songId }: SongEditorProps) {
     lineId: string,
     wordId: string,
     syllables: string[],
+    options?: { everywhere?: boolean },
   ) {
-    updateSong((current) => ({
-      ...current,
-      source: {
-        sections: current.source.sections.map((section) =>
-          section.id === sectionId
-            ? {
-                ...section,
-                lines: section.lines.map((line) =>
-                  line.id === lineId
-                    ? (() => {
-                        const words = line.words.map((word) =>
-                          word.id === wordId
-                          ? {
-                                ...word,
-                                syllabification: "manual" as const,
-                                syllables: syllables.map((text, index) => {
-                                  const existing = word.syllables[index];
-                                  return existing
-                                    ? { ...existing, text }
-                                    : createSyllableToken(text);
-                                }),
-                              }
-                            : word,
-                        );
-                        const validSyllableIds = new Set(
-                          words.flatMap((word) => word.syllables.map((syllable) => syllable.id)),
-                        );
-
-                        return {
-                          ...line,
-                          words,
-                          annotations: line.annotations
-                            .map((annotation) => ({
-                              ...annotation,
-                              syllableIds: annotation.syllableIds.filter((id) =>
-                                validSyllableIds.has(id),
-                              ),
-                            }))
-                            .filter((annotation) => annotation.syllableIds.length > 0),
-                        };
-                      })()
-                    : line,
-                ),
-              }
-            : section,
-        ),
-      },
-    }));
+    const target = { sectionId, lineId, wordId };
+    updateSong((current) => applyWordSyllables(current, target, syllables, options).song);
   }
 
   function handleRestoreWordSyllables(sectionId: string, lineId: string, wordId: string) {
-    updateSong((current) => ({
-      ...current,
-      source: { sections: current.source.sections.map((section) => section.id !== sectionId ? section : { ...section, lines: section.lines.map((line) => line.id !== lineId ? line : { ...line, words: line.words.map((word) => word.id !== wordId ? word : { ...word, syllabification: "auto" as const, syllables: splitWordIntoSyllables(word.originalWord).map((text, index) => word.syllables[index] ? { ...word.syllables[index], text } : createSyllableToken(text)) }) }) }) },
-    }));
+    const target = { sectionId, lineId, wordId };
+    updateSong((current) => {
+      const word = current.source.sections
+        .find((section) => section.id === sectionId)
+        ?.lines.find((line) => line.id === lineId)
+        ?.words.find((candidate) => candidate.id === wordId);
+
+      if (!word) {
+        return current;
+      }
+
+      const pieces = splitWordIntoSyllablesWithPatterns(word.originalWord);
+      return applyWordSyllables(current, target, pieces, { syllabification: "auto" }).song;
+    });
   }
 
   function handlePartCueChange(
@@ -855,6 +863,8 @@ export function SongEditor({ songId }: SongEditorProps) {
       onRestoreWordSyllables={handleRestoreWordSyllables}
       onPartCueChange={handlePartCueChange}
       onDuplicateLine={handleDuplicateLine}
+      onTransferLinePart={handleTransferLinePart}
+      onTransferSectionPart={handleTransferSectionPart}
       onUpdateLineText={handleUpdateLineText}
       onInsertLyrics={handleInsertLyrics}
       onCreateLineAfter={handleCreateLineAfter}
