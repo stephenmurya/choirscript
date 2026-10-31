@@ -272,7 +272,9 @@ export function LyricLineBlock({
             return (
               <span
                 key={flat.id}
-                className="group/token relative flex w-max items-end justify-self-center"
+                className={`group/token relative flex w-max items-end justify-self-center ${
+                  showSplitAffordance ? "pr-3" : ""
+                }`}
                 style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
               >
                 <button
@@ -344,9 +346,11 @@ export function LyricLineBlock({
                       event.stopPropagation();
                       openWordEditor(flat.word);
                     }}
-                    className="pointer-events-none absolute -right-1 -top-2 z-10 grid size-4 place-items-center rounded-full border border-border bg-popover text-muted-foreground opacity-0 shadow-sm transition group-hover/token:pointer-events-auto group-hover/token:opacity-100 group-focus-within/token:pointer-events-auto group-focus-within/token:opacity-100 hover:bg-muted hover:text-foreground"
+                    className={`absolute right-0 top-0 z-10 grid size-3 place-items-center rounded-full border border-border bg-popover text-muted-foreground shadow-sm transition group-hover/token:pointer-events-auto group-hover/token:opacity-100 group-focus-within/token:pointer-events-auto group-focus-within/token:opacity-100 hover:bg-muted hover:text-foreground ${
+                      isSelected ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+                    }`}
                   >
-                    <MoreHorizontal className="size-3" />
+                    <MoreHorizontal className="size-2.5" />
                   </button>
                 ) : null}
               </span>
