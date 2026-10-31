@@ -16,10 +16,22 @@ export function ArrangementRoadmap({ song }: { song: Song }) {
       .map((row) => document.getElementById(`rehearsal-${row.renderIdentity}`))
       .filter(Boolean) as HTMLElement[];
     if (sections.length === 0) return;
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (visible[0]?.target.id) setActiveId(visible[0].target.id);
-    }, { rootMargin: "-5rem 0px -65% 0px", threshold: [0, 0.1, 0.5] });
+
+    // rootMargin only accepts px and %: rem/em throw a SyntaxError, which
+    // escaped the effect and replaced the whole rehearsal view with the
+    // "This page couldn't load" error boundary. Keep px here and never let
+    // the scroll-spy take the document down with it.
+    let observer: IntersectionObserver;
+
+    try {
+      observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]?.target.id) setActiveId(visible[0].target.id);
+      }, { rootMargin: "-80px 0px -65% 0px", threshold: [0, 0.1, 0.5] });
+    } catch {
+      return;
+    }
+
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
   }, [rows]);
