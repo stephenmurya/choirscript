@@ -51,7 +51,10 @@
 html,
 body {
   max-width: 100%;
-  overflow-x: hidden;
+  /* `clip`, not `hidden`: `overflow-x: hidden` turns body into a scroll
+     container, which silently breaks `position: sticky` for the app and editor
+     headers. `clip` contains horizontal overflow without doing that. */
+  overflow-x: clip;
 }
 
 button,

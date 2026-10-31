@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Music2, UserRound } from "lucide-react";
 import { PART_LABELS } from "@/lib/annotationUtils";
 import { resolveArrangement } from "@/lib/arrangement";
 import { ArrangementRoadmap } from "./ArrangementRoadmap";
@@ -106,12 +107,14 @@ function RehearsalTimingLine({
   occurrenceId,
   line,
   toggles,
+  melodyPart,
 }: {
   song: Song;
   sectionId: string;
   occurrenceId: string;
   line: SongLine;
   toggles: RehearsalDisplayToggles;
+  melodyPart?: PartKey | null;
 }) {
   const lineTiming = song.timingByLine[line.id];
 
@@ -124,16 +127,19 @@ function RehearsalTimingLine({
   const sharedEvents = getEventsForScope(lineTiming, "shared").toSorted(
     (a, b) => getEventAbsoluteStart(a, lineTiming.bars) - getEventAbsoluteStart(b, lineTiming.bars),
   );
-  // Only parts that actually have events in this line earn a row. An enabled
-  // part with no content used to draw an empty label-only lane on every line,
-  // which eats the phone viewport without telling the singer anything.
-  const rows = PART_LABELS.filter((part) => {
-    if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
-      return false;
-    }
+  // A melody placement is unison: the chosen part is the only row that matters.
+  // Otherwise only parts that actually have events in this line earn a row — an
+  // enabled part with no content used to draw an empty label-only lane on every
+  // line, which eats the phone viewport without telling the singer anything.
+  const rows = melodyPart
+    ? PART_LABELS.filter((part) => part.key === melodyPart)
+    : PART_LABELS.filter((part) => {
+        if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+          return false;
+        }
 
-    return getEventsForScope(lineTiming, part.key as TimingScope).length > 0;
-  });
+        return getEventsForScope(lineTiming, part.key as TimingScope).length > 0;
+      });
   const partRowStart = 5;
 
   return (
@@ -298,26 +304,52 @@ export function AdvancedTimingRehearsalView({
       </div>
 
       <div className="flex flex-col gap-8">
-        {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
+        {resolveArrangement(song).map(({ occurrence, repeatIndex, renderIdentity, section }) => {
+          const melodyPart =
+            occurrence.voicing === "melody" ? occurrence.melodyPart ?? "soprano" : null;
+
+          return (
           <section
             key={renderIdentity}
             id={`rehearsal-${renderIdentity}`}
             data-rehearsal-section="true"
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
-            <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold text-foreground">{section.name}</h2>
+              {occurrence.performer ? (
+                <span
+                  data-rehearsal-performer="true"
+                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary"
+                >
+                  <UserRound className="size-3" />
+                  {occurrence.performer}
+                </span>
+              ) : null}
+              {melodyPart ? (
+                <span
+                  data-rehearsal-voicing="melody"
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300"
+                >
+                  <Music2 className="size-3" />
+                  Melody · {melodyPart}
+                </span>
+              ) : null}
+            </div>
             {section.lines.map((line) => (
               <RehearsalTimingLine
                 key={`${renderIdentity}:${line.id}`}
                 song={song}
                 sectionId={section.id}
-                occurrenceId={`${occurrenceId}:${repeatIndex}`}
+                occurrenceId={`${occurrence.id}:${repeatIndex}`}
                 line={line}
                 toggles={toggles}
+                melodyPart={melodyPart}
               />
             ))}
           </section>
-        ))}
+          );
+        })}
       </div>
     </article>
     <ArrangementRoadmap song={song} />

@@ -4,6 +4,7 @@ import { DEFAULT_TIMING_SETTINGS, ensureTimingForSong, migrateSongTiming } from 
 import { migrateSongToSourceArrangement, normalizeRepeatCount } from "./arrangement";
 import type {
   Arrangement,
+  LineTiming,
   Song,
   SongLine,
   SourceSection,
@@ -362,6 +363,16 @@ export function normalizeSong(input: Song): Song {
           ...occ,
           id: occ.id || createId("occ"),
           note: occ.note?.trim() ? occ.note.trim() : undefined,
+          performer: occ.performer?.trim() ? occ.performer.trim() : undefined,
+          voicing: occ.voicing === "melody" ? "melody" : undefined,
+          melodyPart:
+            occ.voicing === "melody"
+              ? (["soprano", "alto", "tenor", "bass"] as const).includes(
+                  occ.melodyPart as "soprano" | "alto" | "tenor" | "bass",
+                )
+                ? occ.melodyPart
+                : "soprano"
+              : undefined,
           repeatCount: normalizeRepeatCount(occ.repeatCount),
         })),
     }));
@@ -574,6 +585,129 @@ export function duplicateLine(song: Song, sectionId: string, lineId: string): So
     },
     timingByLine,
   };
+}
+
+/**
+ * Duplicate a Source section: a deep copy with fresh ids for the section, its
+ * lines, words, syllables, annotations and any per-line timing, inserted right
+ * after the original so it is easy to find. Placements are not copied — the
+ * copy shows up in the "add section" list, ready to be placed where it belongs.
+ */
+export function duplicateSection(song: Song, sectionId: string): Song {
+  const normalizedSong = normalizeSong(song);
+  const index = normalizedSong.source.sections.findIndex((candidate) => candidate.id === sectionId);
+
+  if (index === -1) {
+    return normalizedSong;
+  }
+
+  const source = normalizedSong.source.sections[index];
+  const syllableIdMap = new Map<string, string>();
+  const lineIdMap = new Map<string, string>();
+  const barIdMap = new Map<string, string>();
+  const nextSectionId = createId("section");
+
+  const cloned: SourceSection = {
+    ...source,
+    id: nextSectionId,
+    name: nextSectionName(source.name, normalizedSong.source.sections),
+    lines: source.lines.map((line) => {
+      const nextLineId = createId("line");
+      lineIdMap.set(line.id, nextLineId);
+
+      return {
+        ...line,
+        id: nextLineId,
+        words: line.words.map((word) => ({
+          ...word,
+          id: createId("word"),
+          syllables: word.syllables.map((syllable) => {
+            const nextSyllableId = createId("syllable");
+            syllableIdMap.set(syllable.id, nextSyllableId);
+
+            return {
+              ...syllable,
+              id: nextSyllableId,
+              techniques: syllable.techniques.map((technique) => ({ ...technique })),
+            };
+          }),
+        })),
+        annotations: line.annotations.map((annotation) => ({
+          ...annotation,
+          id: createId("annotation"),
+          syllableIds: annotation.syllableIds
+            .map((id) => syllableIdMap.get(id))
+            .filter((id): id is string => Boolean(id)),
+          appliesTo: [...annotation.appliesTo],
+        })),
+      };
+    }),
+  };
+
+  const timingByLine = { ...normalizedSong.timingByLine };
+
+  for (const line of source.lines) {
+    const lineTiming = normalizedSong.timingByLine[line.id];
+    const nextLineId = lineIdMap.get(line.id);
+
+    if (!lineTiming || !nextLineId) {
+      continue;
+    }
+
+    const remapEvent = (event: (typeof lineTiming.sharedEvents)[number]): (typeof lineTiming.sharedEvents)[number] => ({
+      ...event,
+      id: createId("timingEvent"),
+      sectionId: nextSectionId,
+      lineId: nextLineId,
+      barId: barIdMap.get(event.barId) ?? event.barId,
+      syllableId: event.syllableId ? syllableIdMap.get(event.syllableId) : undefined,
+    });
+
+    const bars = lineTiming.bars.map((bar) => {
+      const nextBarId = createId("bar");
+      barIdMap.set(bar.id, nextBarId);
+      return { ...bar, id: nextBarId };
+    });
+
+    timingByLine[nextLineId] = {
+      lineId: nextLineId,
+      bars,
+      sharedEvents: lineTiming.sharedEvents.map(remapEvent),
+      partOverrides: Object.fromEntries(
+        Object.entries(lineTiming.partOverrides).map(([part, events]) => [
+          part,
+          (events ?? []).map(remapEvent),
+        ]),
+      ) as LineTiming["partOverrides"],
+    };
+  }
+
+  const sections = [...normalizedSong.source.sections];
+  sections.splice(index + 1, 0, cloned);
+
+  return {
+    ...normalizedSong,
+    source: { ...normalizedSong.source, sections },
+    timingByLine,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/** "Verse 1" -> "Verse 1 (copy)", then "Verse 1 (copy 2)", never colliding. */
+function nextSectionName(name: string, sections: SourceSection[]): string {
+  const base = `${name.replace(/\s*\(copy(?: \d+)?\)$/i, "").trim()} (copy)`;
+  const taken = new Set(sections.map((section) => section.name.trim().toLowerCase()));
+
+  if (!taken.has(base.toLowerCase())) {
+    return base;
+  }
+
+  let counter = 2;
+  while (taken.has(`${base} ${counter}`.toLowerCase())) {
+    counter += 1;
+  }
+
+  return `${base} ${counter}`;
 }
 
 export function duplicateSong(song: Song): Song {

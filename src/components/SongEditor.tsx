@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
@@ -12,6 +12,7 @@ import {
   createLineFromText,
   duplicateLine,
   deleteLine,
+  duplicateSection,
   normalizeSong,
 } from "@/lib/songStorage";
 import { getEnabledVoiceParts } from "@/lib/songSelection";
@@ -21,12 +22,24 @@ import { splitWordIntoSyllablesWithPatterns } from "@/lib/syllableSplitter";
 import { transferLinePart, transferSectionPart } from "@/lib/partTransfer";
 import type { PartTransferMode } from "@/lib/partTransfer";
 import {
+  createHistory,
+  historyCounts as readHistoryCounts,
+  pushHistoryEntry,
+  takeRedo,
+  takeUndo,
+  type EditorHistory,
+} from "@/lib/editorHistory";
+import { useHistoryHotkeys } from "@/lib/useHistoryHotkeys";
+import {
   appendOccurrence,
   countOccurrencesForSection,
   deleteSourceSectionWithOccurrences,
+  duplicateOccurrence,
   moveOccurrence,
   reorderOccurrence,
   removeOccurrence,
+  setOccurrencePerformer,
+  setOccurrenceVoicing,
   setOccurrenceRepeatCount,
   setOccurrenceNote,
 } from "@/lib/arrangement";
@@ -93,6 +106,10 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
   const hasLoaded = useRef(false);
+  // Mirrors the live song so updateSong/undo/redo never read a stale document.
+  const songRef = useRef<Song | null>(null);
+  const historyRef = useRef<EditorHistory>(createHistory());
+  const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 });
   const editorView = searchParams.get("view") === "parts" || searchParams.get("view") === "arrangement" ? "parts" : "lyrics";
 
   const uid = user?.uid ?? null;
@@ -202,23 +219,65 @@ export function SongEditor({ songId }: SongEditorProps) {
     return () => window.clearTimeout(timeoutId);
   }, [editorView, song]);
 
-  function updateSong(updater: (current: Song) => Song) {
-    setSong((current) => {
-      if (!current) {
-        return current;
-      }
+  // Keep the mirror in step with state so autosave and history agree.
+  useEffect(() => {
+    songRef.current = song;
+  }, [song]);
 
-      return {
-        ...updater(current),
-        updatedAt: new Date().toISOString(),
-      };
-    });
+  function updateSong(updater: (current: Song) => Song) {
+    const current = songRef.current;
+
+    if (!current) {
+      return;
+    }
+
+    const next = { ...updater(current), updatedAt: new Date().toISOString() };
+
+    recordHistory(current);
+    songRef.current = next;
+    setSong(next);
     setSaveState("dirty");
   }
+
+  function recordHistory(previous: Song) {
+    pushHistoryEntry(historyRef.current, previous);
+    syncHistoryCounts();
+  }
+
+  function syncHistoryCounts() {
+    setHistoryCounts(readHistoryCounts(historyRef.current));
+  }
+
+  const undo = useCallback(() => {
+    const previous = takeUndo(historyRef.current, songRef.current);
+
+    if (!previous) {
+      return;
+    }
+
+    songRef.current = previous;
+    setSong(previous);
+    setSaveState("dirty");
+    setHistoryCounts(readHistoryCounts(historyRef.current));
+  }, []);
+
+  const redo = useCallback(() => {
+    const next = takeRedo(historyRef.current, songRef.current);
+
+    if (!next) {
+      return;
+    }
+
+    songRef.current = next;
+    setSong(next);
+    setSaveState("dirty");
+    setHistoryCounts(readHistoryCounts(historyRef.current));
+  }, []);
 
   function handleMetadataChange(patch: Partial<Song>) {
     updateSong((current) => ({ ...current, ...patch }));
   }
+  useHistoryHotkeys(undo, redo);
 
   function handleModeChange(mode: SongMode) {
     setSong((current) => {
@@ -530,6 +589,27 @@ export function SongEditor({ songId }: SongEditorProps) {
     updateSong((current) => duplicateLine(current, sectionId, lineId));
   }
 
+  function handleSetOccurrencePerformer(occurrenceId: string, performer: string) {
+    updateSong((current) => setOccurrencePerformer(current, occurrenceId, performer));
+  }
+
+  function handleSetOccurrenceVoicing(
+    occurrenceId: string,
+    voicing: "harmony" | "melody",
+    melodyPart?: VocalPart,
+  ) {
+    updateSong((current) => setOccurrenceVoicing(current, occurrenceId, voicing, melodyPart));
+  }
+
+  function handleDuplicateOccurrence(occurrenceId: string) {
+    updateSong((current) => duplicateOccurrence(current, occurrenceId));
+  }
+
+  function handleDuplicateSection(sectionId: string) {
+    updateSong((current) => duplicateSection(current, sectionId));
+    toast.success("Section duplicated");
+  }
+
   function handleTransferLinePart(
     sectionId: string,
     lineId: string,
@@ -758,6 +838,10 @@ export function SongEditor({ songId }: SongEditorProps) {
         song={song}
         saveStatus={saveStatus}
         activeView={editorView}
+        canUndo={historyCounts.undo > 0}
+        canRedo={historyCounts.redo > 0}
+        onUndo={undo}
+        onRedo={redo}
       >
         {content}
       </EditorShell>
@@ -810,7 +894,18 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   return shell(
     <div>
-      <div className={editorView === "parts" ? `mx-auto grid max-w-[1500px] gap-6 px-3 pb-10 sm:px-5 ${isInspectorCollapsed ? "xl:grid-cols-[3rem_minmax(0,1fr)_19rem]" : "xl:grid-cols-[15rem_minmax(0,1fr)_19rem]"} lg:px-8` : `mx-auto grid max-w-[1280px] gap-6 px-3 pb-10 sm:px-5 ${isInspectorCollapsed ? "xl:grid-cols-[3rem_minmax(0,1fr)]" : "xl:grid-cols-[15rem_minmax(0,1fr)]"} lg:px-8`}>
+      {/* Full-bleed shell: sidebars hug the page edges, the script stays in a
+          readable column between them instead of everything floating inside a
+          centered max-width container. */}
+      <div className={`grid w-full items-start pb-10 ${
+        editorView === "parts"
+          ? isInspectorCollapsed
+            ? "xl:grid-cols-[3.5rem_minmax(0,1fr)_22rem]"
+            : "xl:grid-cols-[17rem_minmax(0,1fr)_22rem]"
+          : isInspectorCollapsed
+            ? "xl:grid-cols-[3.5rem_minmax(0,1fr)]"
+            : "xl:grid-cols-[17rem_minmax(0,1fr)]"
+      }`}>
       <EditorInspector
         song={song}
         view={editorView}
@@ -829,9 +924,15 @@ export function SongEditor({ songId }: SongEditorProps) {
           onMoveOccurrence={handleMoveOccurrence}
           onReorderOccurrence={handleReorderOccurrence}
           onSetOccurrenceNote={handleSetOccurrenceNote}
+          onSetOccurrencePerformer={handleSetOccurrencePerformer}
+          onSetOccurrenceVoicing={handleSetOccurrenceVoicing}
+          onDuplicateOccurrence={handleDuplicateOccurrence}
+          onDuplicateSection={handleDuplicateSection}
           onSetOccurrenceRepeatCount={handleSetOccurrenceRepeatCount}
           onEditSource={handleEditSource}
         /> : null}
+      <div className="order-2 min-w-0 px-3 pb-10 sm:px-5 xl:px-8">
+      <div className="mx-auto w-full max-w-[920px]">
       <DocumentScriptEditor
       song={song}
       view={editorView}
@@ -870,6 +971,8 @@ export function SongEditor({ songId }: SongEditorProps) {
       onCreateLineAfter={handleCreateLineAfter}
       onDeleteLine={handleDeleteLine}
       />
+      </div>
+      </div>
       </div>
       {(() => {
         const pendingSection = pendingDeleteSectionId ? song.source.sections.find((section) => section.id === pendingDeleteSectionId) : null;

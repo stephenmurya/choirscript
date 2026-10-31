@@ -69,7 +69,7 @@ function InspectorContent({ song, view, onMetadataChange, onReviewImport, onMode
 export function EditorInspector(props: EditorInspectorProps) {
   return <>
     <div className="no-print mb-4 xl:hidden"><Sheet><SheetTrigger render={<Button type="button" variant="outline" className="w-full justify-start gap-2" />}><Settings2 />Editor settings</SheetTrigger><SheetContent side="left" className="w-[min(88vw,22rem)] overflow-y-auto p-5"><SheetHeader className="p-0 pb-6"><SheetTitle>Editor settings</SheetTitle><SheetDescription>Song details, import, and voice setup.</SheetDescription></SheetHeader><InspectorContent {...props} /></SheetContent></Sheet></div>
-    <aside className={`no-print hidden min-w-0 self-start border-r border-border/70 pr-5 xl:sticky xl:top-20 xl:order-0 xl:block xl:max-h-[calc(100svh-6rem)] xl:overflow-y-auto ${props.collapsed ? "xl:w-12 xl:pr-0" : ""}`}>
+    <aside className={`no-print hidden min-w-0 border-r border-border/60 px-4 xl:sticky xl:top-16 xl:order-1 xl:block xl:h-[calc(100svh-4rem)] xl:overflow-y-auto xl:py-5 ${props.collapsed ? "xl:w-14 xl:px-1.5" : ""}`}>
       <Button type="button" variant="ghost" size="icon-sm" className="mb-4" onClick={() => props.onCollapsedChange(!props.collapsed)} aria-label={props.collapsed ? "Expand song details" : "Collapse song details"} title={props.collapsed ? "Expand song details" : "Collapse song details"}>{props.collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}</Button>
       {props.collapsed ? <span className="sr-only">Song details collapsed</span> : <InspectorContent {...props} />}
     </aside>

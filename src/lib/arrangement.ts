@@ -4,6 +4,7 @@ import type {
   ArrangementOccurrence,
   Song,
   SourceSection,
+  VocalPart,
 } from "@/lib/songTypes";
 
 /**
@@ -224,6 +225,86 @@ export function setOccurrenceNote(
     occurrences: current.occurrences.map((occ) =>
       occ.id === occurrenceId ? { ...occ, note: note?.trim() ? note.trim() : undefined } : occ,
     ),
+  }));
+}
+
+/**
+ * Update an occurrence's performer label by occurrence id.
+ * Open-ended: any text is valid, and empty clears the label.
+ */
+export function setOccurrencePerformer(
+  song: Song,
+  occurrenceId: string,
+  performer: string | undefined,
+): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement) {
+    return song;
+  }
+
+  return updateArrangement(song, arrangement.id, (current) => ({
+    ...current,
+    occurrences: current.occurrences.map((occ) =>
+      occ.id === occurrenceId
+        ? { ...occ, performer: performer?.trim() ? performer.trim() : undefined }
+        : occ,
+    ),
+  }));
+}
+
+/**
+ * Set how a placement is voiced. "melody" collapses the section to a single
+ * unison line carried by `melodyPart`; "harmony" restores the normal SATB lanes.
+ */
+export function setOccurrenceVoicing(
+  song: Song,
+  occurrenceId: string,
+  voicing: "harmony" | "melody",
+  melodyPart: VocalPart = "soprano",
+): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement) {
+    return song;
+  }
+
+  return updateArrangement(song, arrangement.id, (current) => ({
+    ...current,
+    occurrences: current.occurrences.map((occ) =>
+      occ.id === occurrenceId
+        ? {
+            ...occ,
+            voicing: voicing === "melody" ? "melody" : undefined,
+            melodyPart: voicing === "melody" ? melodyPart : undefined,
+          }
+        : occ,
+    ),
+  }));
+}
+
+/**
+ * Duplicate a placement in place: the copy lands directly after the original,
+ * pointing at the same source section.
+ */
+export function duplicateOccurrence(song: Song, occurrenceId: string): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement) {
+    return song;
+  }
+
+  const index = arrangement.occurrences.findIndex((occ) => occ.id === occurrenceId);
+  if (index === -1) {
+    return song;
+  }
+
+  const source = arrangement.occurrences[index];
+
+  return updateArrangement(song, arrangement.id, (current) => ({
+    ...current,
+    occurrences: [
+      ...current.occurrences.slice(0, index + 1),
+      { ...source, id: createId("occ") },
+      ...current.occurrences.slice(index + 1),
+    ],
   }));
 }
 

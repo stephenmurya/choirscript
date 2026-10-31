@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ArrowLeft, Copy, Ellipsis, Eye, Share2, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, Ellipsis, Eye, Redo2, Share2, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Song } from "@/lib/songTypes";
 import { useWorkspaceSongs } from "./WorkspaceSongsContext";
@@ -17,10 +17,14 @@ type EditorShellProps = {
   song: Song | null;
   saveStatus: string;
   activeView: "lyrics" | "parts";
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
   children: ReactNode;
 };
 
-export function EditorShell({ song, saveStatus, activeView, children }: EditorShellProps) {
+export function EditorShell({ song, saveStatus, activeView, canUndo = false, canRedo = false, onUndo, onRedo, children }: EditorShellProps) {
   const router = useRouter();
   const { duplicateSong, deleteSong } = useWorkspaceSongs();
   const [isShareOpen, setIsShareOpen] = useState(false);
@@ -66,6 +70,8 @@ export function EditorShell({ song, saveStatus, activeView, children }: EditorSh
           </nav> : null}
           <div className="ml-auto flex items-center gap-1">
             {song ? <>
+              <Button type="button" variant="ghost" size="icon-sm" disabled={!canUndo} onClick={onUndo} aria-label="Undo" title="Undo (Ctrl+Z)"><Undo2 /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" disabled={!canRedo} onClick={onRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Redo2 /></Button>
               <Button render={<Link href={`/songs/${song.id}/rehearsal`} />} size="sm" className="gap-1.5 bg-primary text-primary-foreground shadow-sm"><Eye /><span className="hidden sm:inline">Rehearsal</span></Button>
               <Button type="button" variant="ghost" size="icon-sm" onClick={() => setIsShareOpen(true)} aria-label="Share" title="Share"><Share2 /></Button>
               <Button type="button" variant="ghost" size="icon-sm" onClick={handleDuplicate} aria-label="Duplicate song" title="Duplicate song"><Copy /></Button>

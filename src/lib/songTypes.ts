@@ -155,6 +155,21 @@ export type ArrangementOccurrence = {
   sourceSectionId: string;
   /** Occurrence-local performance note; never mutates Source. */
   note?: string;
+  /**
+   * Who sings this placement: free text ("Lead", "Backups", "Singer 1", a name).
+   * Occurrence-local, so the same section can be performed by different voices
+   * in different slots of the arrangement. Suggestions come from what has
+   * already been typed; see src/lib/performerLabels.ts.
+   */
+  performer?: string;
+  /**
+   * How this placement is voiced. "harmony" (default) keeps the section's SATB
+   * lanes; "melody" means the whole section sings one line in unison, taken from
+   * `melodyPart`.
+   */
+  voicing?: "harmony" | "melody";
+  /** Which part carries the melody when voicing is "melody". */
+  melodyPart?: VocalPart;
   /** Number of consecutive performances represented by this placement. */
   repeatCount?: number;
 };

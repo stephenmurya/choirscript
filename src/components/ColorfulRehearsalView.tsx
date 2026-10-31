@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { Music2, UserRound } from "lucide-react";
 import {
   arrangeTechniqueRangeRows,
   flattenLineSyllables,
@@ -49,25 +50,31 @@ function ReadOnlyVoiceLanes({
   toggles,
   gridStartRow,
   renderIdentity,
+  melodyPart,
 }: {
   line: SongLine;
   toggles: RehearsalDisplayToggles;
   gridStartRow: number;
   renderIdentity: string;
+  melodyPart?: PartKey | null;
 }) {
   const syllables = flattenLineSyllables(line);
-  // A part lane is only worth its row when this line actually sings something
-  // in that part: an empty lane is pure noise on a phone screen, where every
-  // row steals vertical space from the lyrics underneath it.
-  const rows = PART_LABELS.filter((part) => {
-    if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
-      return false;
-    }
+  // A melody placement is unison: everyone sings the one line chosen for the
+  // section, so it is the only lane worth showing. Otherwise a part lane is
+  // only worth its row when this line actually sings something in that part:
+  // an empty lane is pure noise on a phone screen, where every row steals
+  // vertical space from the lyrics underneath it.
+  const rows = melodyPart
+    ? PART_LABELS.filter((part) => part.key === melodyPart)
+    : PART_LABELS.filter((part) => {
+        if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+          return false;
+        }
 
-    return syllables.some((flat) =>
-      Boolean(flat.word.syllables[flat.syllableIndex][part.key]?.trim()),
-    );
-  });
+        return syllables.some((flat) =>
+          Boolean(flat.word.syllables[flat.syllableIndex][part.key]?.trim()),
+        );
+      });
   const labelClass: Record<PartKey, string> = {
     soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
     alto: "border-violet-400/40 bg-violet-500/10 text-violet-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
@@ -143,10 +150,12 @@ function RehearsalLine({
   line,
   toggles,
   renderIdentity,
+  melodyPart,
 }: {
   line: SongLine;
   toggles: RehearsalDisplayToggles;
   renderIdentity: string;
+  melodyPart?: PartKey | null;
 }) {
   const flatSyllables = flattenLineSyllables(line);
   const placedTechniqueRanges = toggles.techniques
@@ -229,6 +238,7 @@ function RehearsalLine({
             toggles={toggles}
             gridStartRow={voiceStartRow}
             renderIdentity={renderIdentity}
+            melodyPart={melodyPart}
           />
         </div>
       </LineScroll>
@@ -276,14 +286,38 @@ export function ColorfulRehearsalView({
       ) : null}
 
       <div className="space-y-8">
-        {resolveArrangement(song).map(({ occurrenceId, repeatIndex, renderIdentity, section }) => (
+        {resolveArrangement(song).map(({ occurrence, repeatIndex, renderIdentity, section }) => {
+          const melodyPart =
+            occurrence.voicing === "melody" ? occurrence.melodyPart ?? "soprano" : null;
+
+          return (
           <section
             key={renderIdentity}
             id={`rehearsal-${renderIdentity}`}
             data-rehearsal-section="true"
             className="rehearsal-section border-b border-border pb-8 last:border-b-0"
           >
-            <h2 className="mb-3 text-xl font-semibold text-foreground">{section.name}</h2>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold text-foreground">{section.name}</h2>
+              {occurrence.performer ? (
+                <span
+                  data-rehearsal-performer="true"
+                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary"
+                >
+                  <UserRound className="size-3" />
+                  {occurrence.performer}
+                </span>
+              ) : null}
+              {melodyPart ? (
+                <span
+                  data-rehearsal-voicing="melody"
+                  className="inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-emerald-300"
+                >
+                  <Music2 className="size-3" />
+                  Melody · {melodyPart}
+                </span>
+              ) : null}
+            </div>
             {section.lines.length === 0 ? (
               <p className="text-muted-foreground">No lyric lines in this section.</p>
             ) : null}
@@ -292,11 +326,13 @@ export function ColorfulRehearsalView({
                 key={`${renderIdentity}:${line.id}`}
                 line={line}
                 toggles={toggles}
-                renderIdentity={`${occurrenceId}:${repeatIndex}:${line.id}`}
+                renderIdentity={`${occurrence.id}:${repeatIndex}:${line.id}`}
+                melodyPart={melodyPart}
               />
             ))}
           </section>
-        ))}
+          );
+        })}
       </div>
     </article>
     <ArrangementRoadmap song={song} />
