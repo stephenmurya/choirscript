@@ -44,29 +44,19 @@ last commit `a79c7b1` 2026-10-31. No CI configuration (`.github` absent), no tes
 | 2026-09-07 | `8c829a7` | Phase 3D: refine editor and rehearsal workflows | 24 | `ImportReviewDialog`, roadmap rework (42 changed lines), `RehearsalView` rework (44 changed lines), `SongEditor` (187 changed lines), `songSelection` (31 changed lines), `lyricsParser` suspicious-line detection |
 | 2026-10-24 | `8c68463` | added legal pages | 8 | `/privacy`, `/terms`, `LegalPage`, login-page legal links; **also** the same-origin `/__/auth/*` rewrite in `next.config.ts` and auth/client adjustments |
 | 2026-10-31 | `a79c7b1` | fix: keep rehearsal view mounted by using a valid rootMargin | 1 | `ArrangementRoadmap` scroll-spy fixed: `-5rem` -> `-80px` and `try/catch` around `IntersectionObserver` construction |
+| 2026-10-31 | `e920af4` | feat(editor): syllable splits with a device dictionary and part transfer | 12 | `syllableDictionary.ts`, rewritten `syllableSplitter.ts`, `applyWordSyllables` in `lineText.ts`, split panel in `LyricLineBlock`, `partTransfer.ts` + `PartTransferMenu`, 3-dot word affordance |
+| 2026-10-31 | `3466e1e` | docs: syllable splitting, part transfer, rehearsal responsiveness | 3 | Ledger + architecture updates for the above |
+| 2026-10-31 | `eabea13` | fix(rehearsal): keep long lines reachable on mobile and drop empty part lanes | 5 | `LineScroll` scroll port with edge fade + Swipe hint, empty-lane suppression, 3-dot containment in `LyricLineBlock` |
+| 2026-10-31 | `6916c4a` | feat(editor): performer labels, melody/harmony voicing, section duplication, undo/redo | 14 | `ArrangementOccurrence.performer` + `performerLabels.ts`, `voicing`/`melodyPart` + single-lane melody rendering, `duplicateSection`, `editorHistory.ts` + `useHistoryHotkeys`, `overflow-x: clip` sticky fix |
+| 2026-10-31 | `3505315` | feat(editor): remove the left sidebar; nav owns import, settings and timing mode | 12 | `EditorShell`/`EditorNav` tabs (`lyrics`/`parts`/`advanced`), `SongSettingsDialog`, header import icon + hidden file input, deleted `EditorInspector`, `LyricsImporter`, `ModeToggle`, resizable arrangement panel (`usePanelWidth`, `PanelResizeHandle`) |
+| 2026-10-31 | `310b39f` | fix(rehearsal): opaque header on the shared rehearsal page | 1 | `bg-background` instead of 90% + blur |
+| 2026-10-31 | `974fa80` | fix(rehearsal): part lanes follow content, not the voice preset | 3 | Lane rows no longer gated by `toggles.enabledParts` in either rehearsal view; snapshot-date badge on the shared page |
+| 2026-10-31 | `29d85f6` | feat(share): live share links with in-place refresh; tighter mobile rehearsal | 15 | Mutable share head + `.rev.json` + `editToken`, `SharedSongLive`, publish-on-save, ADR-0011, CSS density vars |
+| 2026-10-31 | `8942c88` | fix(rehearsal): fit more syllables per line on phones | 2 | Note box `h-9 w-10` → `h-7 w-8`, lane chip `h-7` → `h-6`, `--syllable-pad 0.125rem`, `--line-col-gap 0.125rem`, `--line-col gap 0.125rem` |
+| 2026-10-31 | `783c338` | feat(share): push live updates over a Firestore doorbell instead of polling | 8 | `shareHeads` rules + `shareHeads.ts`, `publishShareHead` wiring, `SharedSongLive` subscription, 3 s poll removed, ADR-0011/ledger rewritten |
 
-Uncommitted working tree on 2026-10-31 (as read at 09:15; not part of any commit):
-
-- `src/lib/syllableDictionary.ts` added: localStorage dictionary (`lookupSyllables`,
-  `rememberSyllables`, `forgetSyllables`), apply-scope preference get/set/subscribe.
-- `src/lib/syllableSplitter.ts` modified: Unicode `WORD_PATTERN`, curated `EXCEPTIONS`,
-  dictionary-first precedence, `splitWordIntoSyllablesWithPatterns`, `applyPieces`,
-  `splitManualSyllables` accepting `- – — / · •`, `wordEdges`, `countWordLetters`.
-- `src/lib/lineText.ts` modified: Unicode word surface handling, safer unmatched-surface path,
-  `applyWordSyllables(song, target, pieces, { everywhere, syllabification })`.
-- `src/lib/partTransfer.ts` added: pure `move`/`swap` transfer helpers for line, section, and
-  song scope; rewrites part strings only, leaving timing and annotations untouched.
-- `src/components/PartTransferMenu.tsx` added: line/section/song scoped menu over enabled parts.
-  Not imported by any rendered component at the time of reading.
-- `src/components/LyricLineBlock.tsx` modified: word split panel with live preview, dictionary
-  write on save, "Forget saved split", "apply to every occurrence" switch, hover affordance on
-  words of at least three letters.
-- `src/components/SongEditor.tsx` modified: syllable edits routed through `applyWordSyllables`
-  with options, instead of the previous in-place syllable mapping.
-
-Status of that work: not committed, not covered by automated tests, and not verified in a
-browser during this documentation pass. Parts of it are reachable if the dev server is run from
-this working tree, which is exactly why it is recorded separately from shipped phases.
+Everything below the table is now committed — the earlier "uncommitted working tree" note in this
+document was accurate on the morning of 2026-10-31 and is superseded by the rows above.
 
 ## Phase narrative
 
@@ -165,6 +155,33 @@ future invalid option degrades to a missing scroll-spy instead of a blank page
 Unverified: no regression test was added, and nothing prevents a future `rem` value in that
 option. Verification today is code inspection plus the commit.
 
+## Editor shell restructure (2026-10-31)
+
+`3505315`. The left sidebar is gone. `EditorShell` now owns a sticky header holding: the import
+icon (`FileUp` opens the OS picker, the file feeds the existing review dialog), the settings icon
+(`SongSettingsDialog` with title/artist/key/BPM/director notes plus voice preset and part
+switches), undo/redo, share, and the `EditorNav` tabs.
+
+- `EditorNav` renders `lyrics | parts | advanced` twice — a segmented control on desktop and a
+  full-width row on mobile — and both are the same component, so the two cannot drift. "Advanced"
+  sets `song.mode = "advanced"`; the other two set it back to `"simple"`. Simple timing is the
+  default because `activeNav` derives from `song.mode` and `?view=`.
+- Deleted `EditorInspector.tsx`, `LyricsImporter.tsx`, `ModeToggle.tsx`. The first two were the
+  entire left column; nothing referenced them afterwards.
+- The arrangement panel is resizable (`usePanelWidth` + `PanelResizeHandle`), width driven by a
+  `--arrange-width` custom property on `.editor-columns`, persisted per device, with the previous
+  fixed width as the minimum (22rem, max 40rem). Double-clicking the handle resets it.
+- **Three CSS bugs were found during this work and are worth remembering:**
+  1. `html, body { overflow-x: hidden }` silently breaks `position: sticky` everywhere, because it
+     turns the body into a scroll container. `overflow-x: clip` contains the overflow without that
+     side effect. This is why the nav bar would not stick even though it already had `sticky`.
+  2. An **unlayered** `button, input, textarea, select { font: inherit }` rule beat every Tailwind
+     `text-*` utility, so form controls rendered at 16px inside 11px controls — the arrangement
+     fields "did not fit" for months. Unlayered author CSS outranks all Tailwind layers. The rule
+     was deleted (preflight already sets `font: inherit` inside `@layer base`).
+  3. The real width driver on phones was the note box (`h-9 w-10`, fixed 40px) — shrinking the
+     word cells changed nothing until it went to `h-7 w-8`.
+
 ## Live share links and mobile rehearsal density
 
 Delivered after `974fa80`. Recorded in [ADR-0011](../adr/ADR-0011-live-share-links.md), which
@@ -188,6 +205,11 @@ supersedes ADR-0006.
   `delete` are denied. The document is advisory — the Blob payload stays authoritative, so a bogus
   head costs one wasted fetch. The Firestore SDK is imported dynamically inside `subscribeShareHead`
   so it stays out of the route's first-load bundle.
+- **Part lanes follow content.** `ReadOnlyVoiceLanes` and the advanced view's row filter no longer
+  consult `toggles.enabledParts`: a part with values on the line always renders. Before this, a
+  song whose `voicePreset` was `unison` (or whose saved `enabledParts` list omitted a part) drew
+  lyrics with zero lanes — the "parts don't show" report. The per-part switches in rehearsal still
+  hide a lane deliberately; the preset no longer does it silently.
 - **No CDN staleness.** `getSharedSong` reads with `useCache: false`; both API routes are
   `force-dynamic` and answer `cache-control: no-store`.
 - **Copy changed.** The "changes to the original song do not update this link" paragraph and the

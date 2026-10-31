@@ -83,6 +83,11 @@ There is no `?view=arrangement` link in the UI; `EditorShell` only emits `?view=
 
 ## Editor lifecycle
 
+0. **Shell.** `EditorShell` renders a sticky header with the import icon (`FileUp` → hidden file
+   input → `pendingImportText` review dialog), the settings icon (`SongSettingsDialog`: title,
+   artist, key, BPM, director notes, voice preset and part switches), undo/redo, share, and the
+   view tabs. `EditorNav` owns `lyrics | parts | advanced`; choosing "advanced" sets
+   `song.mode = "advanced"`, the others set it back to `"simple"`. There is no left sidebar.
 1. **Mount.** `SongEditor` reads `songId` from the route and `view` from the query. `useAuth()`
    supplies `uid` and `workspaceId`.
 2. **Load.** An effect keyed on `[workspaceId, uid, songId]` clears prior state inside a
@@ -151,11 +156,19 @@ queries songs while an import is in flight.
 
 ## Share flow
 
-`ShareDialog` posts `{ song }` to `/api/share` (`src/components/ShareDialog.tsx:73`). The route
-validates size and shape, calls `createSharedSong`, and returns an absolute URL built from the
-request origin (`src/app/api/share/route.ts:106`). The dialog shows the URL with a copy button
-and an "Open link" action. The shared page renders server-side and never mounts any of the
-authenticated providers.
+`ShareDialog` posts `{ song }` to `/api/share` (`src/components/ShareDialog.tsx`). The route
+validates size and shape, calls `createSharedSong`, and returns
+`{ shareId, editToken, revision, url }`. The dialog stores `{ id, editToken, publishedAt }` on
+the song document (`song.share`) so any signed-in device can republish, rings the
+`shareHeads/{shareId}` doorbell, and shows the URL with copy and "Open link" actions.
+
+The link is live: `SongEditor.publishShare()` republishes 2 s after the last edit and rings the
+doorbell again. `/s/[shareId]` renders server-side (no authenticated providers mount), then
+`SharedSongLive` holds one Firestore `onSnapshot` on the doorbell; a newer revision triggers a
+single payload fetch and an in-place swap. `visibilitychange` is the only catch-up path.
+
+Relevant knobs: `SHARE_PUBLISH_DEBOUNCE_MS` (2000, `SongEditor`), `UPDATED_FLASH_MS` (6000,
+`SharedSongLive`). There is no polling interval and no timer in the shared page.
 
 ## Known gaps
 

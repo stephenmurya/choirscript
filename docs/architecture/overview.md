@@ -5,8 +5,8 @@
 ChoirScript is a web app for choir directors who teach by ear. A director keeps a library of
 songs in a personal workspace; each song contains lyric sections, four-part notation cues per
 syllable, technique annotations, optional director notes, and an optional bar-level timing
-grid. A song can be rehearsed in a read-only performance view, printed, or published as an
-immutable read-only link.
+A song can be rehearsed in a read-only performance view, printed, or published as a live link
+that always shows the current song.
 
 The product surface that actually exists in code:
 
@@ -76,7 +76,7 @@ src/lib/timing.ts             bar/event timing engine
 src/lib/annotationUtils.ts    technique range grouping and annotation mutations
 src/lib/lineText.ts           lyric-edit reconciliation against token structure
 src/lib/syllableSplitter.ts   syllable splitting (dictionary -> exceptions -> hyphen patterns)
-src/lib/syllableDictionary.ts localStorage user dictionary (uncommitted)
+src/lib/syllableDictionary.ts localStorage user dictionary
 docs/                         this documentation set
 scripts/                      manual validation scripts (not wired to npm or CI)
 firestore.rules               security rules (deployed via firebase.json)
@@ -109,11 +109,14 @@ Browser
   |                                                       workspaces/{workspaceId}/songs/{songId}/document/current
   |-- localStorage ------------------------------------- choirscript.songs.v1 (legacy import source)
   |                                                       choirscript.migration.progress.v1
-  |                                                       choirscript.syllableDictionary.v1 (uncommitted)
+  |                                                       choirscript.syllableDictionary.v1
   |
-  '-- POST /api/share -> Vercel Blob -> shares/{shareId}.json
-                              ^
-Browser /s/[shareId] <---------'  (server component reads Blob, renders read-only rehearsal)
+  '-- POST /api/share --------> Vercel Blob -> shares/{shareId}.json  (moving head)
+      PUT /api/share/{id}  --> rewrites it, bumps shares/{shareId}.rev.json
+      (editor)  -------------> Firestore shareHeads/{shareId}  (doorbell: revision)
+                                 |
+Browser /s/[shareId] <-----------'  (server component reads Blob; SharedSongLive holds the
+                                    doorbell listener and swaps a new revision in place)
 ```
 
 Firestore document shapes and the Blob contract are documented in
@@ -131,14 +134,15 @@ Firestore document shapes and the Blob contract are documented in
 | `src/lib/annotationUtils.ts` | Flatten syllables, group annotations into display ranges, apply/remove techniques | `defaultTechniques`, `songStorage` |
 | `src/lib/lineText.ts` | Reconcile plain-text lyric edits against existing word/syllable tokens, prune stale annotations, remap timing | `songStorage`, `syllableSplitter` |
 | `src/lib/syllableSplitter.ts` | Split a word into sung syllables; parse manual hyphen input | `hyphen`, `syllableDictionary` |
-| `src/lib/syllableDictionary.ts` | Per-browser manual split memory and "apply everywhere" preference (uncommitted) | localStorage |
+| `src/lib/syllableDictionary.ts` | Per-browser manual split memory and "apply everywhere" preference | localStorage |
 | `src/lib/lyricsParser.ts` | Parse pasted lyrics into sections/lines; flag scraped site chrome | nothing |
 | `src/lib/songSummary.ts` | Derive per-song module presence for card metadata | `arrangement` |
 | `src/lib/songSelection.ts` | Enabled voice parts, presence of part entries, preset labels | `songTypes` |
 | `src/lib/firebase/songs.ts` | Song repository: list/get/create/save/duplicate/delete/backfill | Firestore SDK, `songStorage`, `songSummary` |
 | `src/lib/firebase/AuthContext.tsx` | Auth state machine and workspace bootstrap | `auth.ts`, `client.ts`, `workspace.ts` |
 | `src/lib/firebase/migration.ts` | One-time import of legacy localStorage songs into Firestore | `songs.ts`, `songStorage` |
-| `src/lib/share-store.ts` | Create/read immutable share payloads in Blob | `@vercel/blob`, `songStorage` |
+| `src/lib/share-store.ts` | Create/read/republish live share payloads in Blob, plus the revision head | `@vercel/blob`, `songStorage` |
+| `src/lib/shareHeads.ts` | Publish and subscribe to the `shareHeads/{id}` doorbell that pushes a new revision to open pages | `firebase/firestore`, `firebase/client` |
 
 ## Key structural properties
 
@@ -154,9 +158,16 @@ Firestore document shapes and the Blob contract are documented in
 - **Timing is keyed by line, not by occurrence.** `Song.timingByLine[lineId]` with
   `sharedEvents` plus `partOverrides` (`src/lib/songTypes.ts:68`). Repeated sections reuse the
   same timing.
-- **Immutable sharing.** `POST /api/share` writes a snapshot with `allowOverwrite: false` and
-  a random 10-character id; later edits never change an existing link
-  (`src/lib/share-store.ts:46`, `:67`).
+- **Sharing is live, not a snapshot.** `POST /api/share` mints a `shareId` plus an `editToken`;
+  the editor republishes `shares/{id}.json` in place on every save (`PUT /api/share/{id}`) and
+  bumps `shares/{id}.rev.json`. Open rehearsal pages learn about the change from a Firestore
+  doorbell document (`shareHeads/{id}`, push via `onSnapshot`) and swap the payload in place —
+  no polling, no reload (`ADR-0011`, superseding `ADR-0006`; `src/lib/share-store.ts`,
+  `src/lib/shareHeads.ts`).
+- **Part lanes follow content, never the preset.** A voice-lane row renders whenever that part
+  actually has values on the line; the song's `voicePreset`/`enabledParts` cannot hide it. This
+  was the cause of "parts missing" on shared links: a Unison preset with notes in alto/tenor
+  rendered lyrics with zero lanes (`src/components/ColorfulRehearsalView.tsx`).
 
 ## Dead code
 
@@ -165,8 +176,10 @@ Verified by searching for imports of every file in `src/components/`:
 `AnnotationInspector`, `FloatingTechniqueToolbar`, `MetadataPanel`, `RawMarkupPreview`,
 `SectionList`, `SelectableSyllableText`, `SelectedSyllableInspector`, `SongDashboard`,
 `SyllableGrid`, `TechniquePalette`, `VoicePartCueInput` are never imported by another module.
-The uncommitted `PartTransferMenu.tsx` is also not imported yet, but it is new work in progress
-rather than abandoned code, so it is not counted here.
+
+Three components were deleted when the editor shell was restructured: `EditorInspector.tsx`
+(its fields became `SongSettingsDialog`), `LyricsImporter.tsx` (import is now a header icon plus
+the existing review dialog), and `ModeToggle.tsx` (timing mode moved into `EditorNav`).
 
 Two legacy localStorage song helpers are also unreachable from the UI: `loadSongs` and
 `saveSongs` in `src/lib/songStorage.ts:410` and `:433`, and therefore `createSampleSong`
@@ -175,21 +188,21 @@ the only live song persistence path. The legacy key is still read by
 `src/lib/firebase/migration.ts:5` for the one-time import, which is why the constant and
 `normalizeSong` remain.
 
-## Uncommitted working tree (2026-10-31)
+## Shipped on 2026-10-31 (was the "uncommitted working tree")
 
-The working tree contains an in-progress syllable-editing and part-transfer change set that is
-not in any commit:
+Everything listed in earlier revisions of this section is now committed, deployed and documented
+in the ledger: the syllable dictionary and whole-song split application (`e920af4`), part
+move/swap (`e920af4`), performer labels and melody/harmony voicing (`6916c4a`), undo/redo with
+`src/lib/editorHistory.ts` and `src/lib/useHistoryHotkeys.ts`, the sidebar-free editor shell
+(`EditorShell` + `EditorNav` + `SongSettingsDialog`, `3505315`), live share links with push
+delivery (`29d85f6`, `783c338`), part lanes that follow content (`974fa80`), and the phone
+density pass (`8942c88`).
 
-- `src/lib/syllableDictionary.ts` (new), `src/lib/syllableSplitter.ts` (modified),
-  `src/lib/lineText.ts` (modified): user dictionary, Unicode-aware tokenization, and
-  `applyWordSyllables` for per-word or whole-song split application.
-- `src/lib/partTransfer.ts` (new), `src/components/PartTransferMenu.tsx` (new): pure move/swap
-  helpers and an unmounted menu component.
-- `src/components/LyricLineBlock.tsx`, `src/components/SongEditor.tsx` (modified): split panel,
-  dictionary writes, apply-everywhere switch.
-This work is not shipped and is not described as a feature anywhere in these docs. See
-[../future/README.md](../future/README.md) for its intended scope and open questions, and the
-ledger for the exact file list at the time of writing.
+New modules worth knowing: `src/lib/shareHeads.ts` (doorbell publish/subscribe),
+`src/lib/usePanelWidth.ts` (resizable panel widths), `src/components/PanelResizeHandle.tsx`,
+`src/components/SharedSongLive.tsx` (in-place revision swap), `src/components/EditorNav.tsx`,
+`src/components/SongSettingsDialog.tsx`, `src/components/ArrangementMobileBar` (in
+`ArrangementRoadmap.tsx`).
 
 ## Documentation gaps and drift
 

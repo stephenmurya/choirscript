@@ -6,14 +6,14 @@ ChoirScript has no application server for song data. Two managed services hold a
 
 | Service | Used for | Accessed from |
 | --- | --- | --- |
-| Cloud Firestore | users, workspaces, memberships, song metadata, song bodies | Browser, via Firebase client SDK |
-| Vercel Blob | immutable read-only share snapshots | `POST /api/share` and the `/s/[shareId]` server component only |
+| Cloud Firestore | users, workspaces, memberships, song metadata, song bodies, share doorbells | Browser, via Firebase client SDK |
+| Vercel Blob | live share payloads (mutated in place, revisioned) | `src/app/api/share/**` and the `/s/[shareId]` server component only |
 | Firebase Auth | identity | Browser |
 
-The only Next.js server code that touches data is `src/app/api/share/route.ts` and the
-`/s/[shareId]` page (`src/app/s/[shareId]/page.tsx`), both backed by
-`src/lib/share-store.ts`, which begins with `import "server-only"` (`:1`) so it cannot be
-bundled into a client component.
+The only Next.js server code that touches data is `src/app/api/share/` (create, payload read,
+republish, revision) and the `/s/[shareId]` page (`src/app/s/[shareId]/page.tsx`), both backed by
+`src/lib/share-store.ts`, which begins with `import "server-only"` so it cannot be bundled into a
+client component.
 
 There are no Cloud Functions, no Firebase Storage usage, no App Check configuration, no cron
 jobs, and no queue.
@@ -185,63 +185,100 @@ backend work:
   membership check as the metadata (`firestore.rules:127`-`:131`). Adding a new subcollection
   under `songs/{id}` requires a new rule block; the catch-all at `:136` denies by default.
 - `delete` of `users/{uid}` and `workspaces/{id}` is denied, so account/workspace deletion
-  cannot be implemented from the client as the rules stand.
+  cannot be implemented from the rules as they stand.
+- **`shareHeads/{shareId}` is the one public collection.** It exists so an open rehearsal page
+  can learn that the song changed without polling, and it carries only
+  `{ shareId, revision, updatedAt }`:
 
-## Share pipeline (Vercel Blob)
+  ```
+  match /shareHeads/{shareId} {
+    allow get: if true;            // public read of a counter, never song content
+    allow list: if false;          // no enumeration
+    allow create, update: if request.auth != null;
+    allow delete: if false;
+  }
+  ```
 
-### Write path
+  Deployed with `firebase deploy --only firestore:rules --project choirscript-d2651`.
+  Verified against the live project with the web API key: anonymous `get` → 404 for a missing
+  doc (read allowed), anonymous `PATCH` → 403, anonymous read of a workspace song → 403.
+
+## Share pipeline (Vercel Blob + a Firestore doorbell)
+
+A share is a **moving head**, not a snapshot (`ADR-0011`, which supersedes `ADR-0006`):
+`/s/{shareId}` always renders the current song, and an open page swaps a new revision in place.
+
+### Write path (create)
 
 `ShareDialog` posts the whole in-memory song to `/api/share`
-(`src/components/ShareDialog.tsx:73`). `POST` in `src/app/api/share/route.ts:75`:
+(`src/components/ShareDialog.tsx`). `POST` in `src/app/api/share/route.ts`:
 
-1. Rejects when `Content-Length` exceeds 1 MiB (`MAX_SHARE_PAYLOAD_BYTES`, `:4`, `:78`).
-2. Reads the body as text and rejects when the encoded byte length exceeds the same limit
-   (`:90`) — this catches chunked requests without a length header.
-3. Rejects invalid JSON (`:98`) and payloads that are not `{ song: { title: non-empty string } }`
-   (`:102`).
-4. Calls `createSharedSong(parsed.song)` and returns
-   `{ shareId, url: new URL(share.url, request.url).toString() }` (`:107`-`:111`).
+1. Rejects when `Content-Length` exceeds 1 MiB (`MAX_SHARE_PAYLOAD_BYTES`).
+2. Reads the body as text and rejects when the encoded byte length exceeds the same limit —
+   this catches chunked requests without a length header.
+3. Rejects invalid JSON and payloads that are not `{ song: { title: non-empty string } }`.
+4. Calls `createSharedSong(parsed.song)` and returns `{ shareId, editToken, revision, url }`.
 5. On a Blob failure, logs the real exception server-side and returns
-   `{ error: "Could not create share link.", diagnostic: "blob:…" }` with status 500
-   (`:112`-`:123`). No tokens or credentials are logged (`:18`-`:50`, `:69`-`:72`).
+   `{ error, diagnostic: "blob:…" }` with status 500. No tokens or credentials are logged.
 
-`createSharedSong` (`src/lib/share-store.ts:46`):
+`createSharedSong` (`src/lib/share-store.ts:55`):
 
-- Generates `shareId = nanoid(10)` (`:49`), matching `SHARE_ID_PATTERN`
-  `/^[A-Za-z0-9_-]{10,32}$/` (`:9`).
-- Builds a `SharedSongPayload` (`schemaVersion: 2`, `shareId`, timestamps, top-level
-  `title`/`artist`/`key`/`bpm` copied from the song, `song: normalizeSong(song)`), `:51`-`:65`.
-- Writes `shares/{shareId}.json` with `access: "private"`, `allowOverwrite: false`,
-  `contentType: "application/json"` (`:67`-`:71`). Immutability is enforced by the storage
-  option, not by convention: a second write to the same path fails.
+- Generates `shareId = nanoid(10)` and `editToken = randomBytes(24).toString("base64url")`.
+- Writes `shares/{shareId}.json` with `allowOverwrite: true` and `cacheControlMaxAge: 0`, and
+  `shares/{shareId}.rev.json` = `{ revision: 1, updatedAt }`.
+- Writes `shares/{shareId}.key.json` = `{ editToken }`. The token never enters the public
+  payload: `buildPayload` strips `song.share` before serialising.
 - Returns the relative URL `/s/{shareId}`.
 
-Before writing it logs the resolved credential mode: `BLOB_READ_WRITE_TOKEN`, or
-`VERCEL_OIDC_TOKEN` together with `BLOB_STORE_ID`, or `none`
-(`logBlobAuthMode`, `src/lib/share-store.ts:15`). This log line is the first thing to read when
-share creation fails on a preview deployment.
+There is **no authentication check** on `POST /api/share` — the link is the credential, and
+creating one needs no account. Anyone who can reach the endpoint can store a payload of up to
+1 MiB and receive a public link to it. Republishing is the protected half: it requires the
+`editToken`, which never leaves the owner's song document and the server-side `.key.json` blob.
 
-There is **no authentication check** on `POST /api/share`. Anyone who can reach the endpoint can
-store a payload of up to 1 MiB and receive a public link to it. The payload must be a
-well-formed song with a title, but it need not belong to the caller.
+### Write path (republish)
+
+The editor republishes on save: `publishShare()` in `SongEditor` runs 2 s after the last edit
+(`SHARE_PUBLISH_DEBOUNCE_MS`) and calls `PUT /api/share/{id}` with `{ editToken, song }`.
+`publishSharedSong` (`src/lib/share-store.ts:94`) compares the stored token, increments the
+revision from the existing head, rewrites the payload and the `.rev.json`, and returns
+`{ revision, updatedAt }`. A wrong or missing token yields `forbidden` → 403. The same PUT is
+used by "publish now" in `ShareDialog`.
+
+### Delivery (push, not polling)
+
+After a successful PUT the client writes `shareHeads/{shareId}` through
+`publishShareHead()` (`src/lib/shareHeads.ts`) — once at creation, on every publish, and on
+"publish now". `/s/{shareId}` renders `SharedSongLive`, which holds a single `onSnapshot` on
+that document via `subscribeShareHead()`; Firestore pushes the write and the component fetches
+`/api/share/{id}` once and swaps the payload in place, no reload. The Firestore SDK is imported
+dynamically so it stays out of the route's first-load bundle.
+
+The doorbell is **advisory**: the Blob payload is authoritative, so a stale or bogus head costs
+one wasted fetch. `visibilitychange` performs a single `/rev` catch-up for a tab that was asleep
+when the write landed. A publish made outside the editor (direct `PUT`) does not ring, because
+the API route has no Firebase credentials to write the document.
+
+Routes: `POST /api/share` (create), `GET|PUT /api/share/{id}` (read payload / republish),
+`GET /api/share/{id}/rev` (cheap revision read). All are `force-dynamic` and answer
+`cache-control: no-store`.
 
 ### Read path
 
 `/s/[shareId]` is a server component. `generateMetadata` and the page both call
-`getSharedSong(shareId)`, which is wrapped in React `cache()` so the stream-consuming Blob GET
-happens once per request (`src/lib/share-store.ts:86`; comment at `:79`-`:85`).
+`getSharedSong(shareId)`, wrapped in React `cache()` so the stream-consuming Blob GET happens
+once per request (`src/lib/share-store.ts:259`).
 
 `getSharedSong`:
 
-1. Rejects ids that do not match `SHARE_ID_PATTERN` (`:87`).
-2. `get("shares/{id}.json", { access: "private", useCache: true })` (`:92`).
-3. Returns `null` unless `statusCode === 200` and a stream exists (`:97`).
+1. Rejects ids that do not match `SHARE_ID_PATTERN`.
+2. `get("shares/{id}.json", { access: "private", useCache: false })` — `useCache` is off
+   because a cached copy would serve the previous revision for the CDN TTL.
+3. Requires `statusCode === 200` and a stream; otherwise `null`.
 4. Parses the payload and requires `schemaVersion` in `[1, 2]`, a matching `shareId`, and a
-   `song` (`:104`). Schema 1 snapshots are accepted and normalized in memory (`:108`-`:112`);
-   the Blob object is never rewritten.
-5. Any thrown error becomes `null` (`:113`), so a missing, expired, or malformed snapshot all
-   render the same "This ChoirScript link is unavailable." card
-   (`src/app/s/[shareId]/page.tsx:85`).
+   `song`. Schema 1 payloads are accepted and normalized in memory; payloads without a
+   `revision` read as revision 1, so links created before live shares still render.
+5. Any thrown error becomes `null`, so a missing, expired, or malformed payload all render the
+   same "This ChoirScript link is unavailable." card (`src/app/s/[shareId]/page.tsx`).
 
 The page then renders `AdvancedTimingRehearsalView` or `ColorfulRehearsalView` based on
 `song.mode` with all display toggles on except large text and black-and-white

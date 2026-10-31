@@ -20,7 +20,7 @@ Use a three-level precedence chain in `splitWordIntoSyllables`
 (`src/lib/syllableSplitter.ts:101`):
 
 1. **User dictionary** (highest): `lookupSyllables` from `src/lib/syllableDictionary.ts`
-   (uncommitted). Keys are lowercased and trimmed (`normalizeWordKey`, `:63`); entries are
+   (shipped 2026-10-31). Keys are lowercased and trimmed (`normalizeWordKey`, `:63`); entries are
    applied with the word's own leading/trailing punctuation and capitalization carried across
    the pieces (`applyPieces`, `:67`).
 2. **Curated exceptions**: a hand-written map of choir vocabulary where the pattern dictionary

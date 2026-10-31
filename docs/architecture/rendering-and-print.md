@@ -38,16 +38,16 @@ The word split editor is an inline panel, not a modal. Double-clicking any sylla
 clicking the hover affordance shown on the final syllable of a word with at least three letters,
 opens it (`src/components/LyricLineBlock.tsx`; `MIN_SPLIT_AFFORDANCE_LETTERS` in
 `src/lib/syllableSplitter.ts:13`). The panel offers a hyphen-separated text field with a live
-preview, "Merge syllables", "Split at" a character index, "Restore automatic", and — in the
-uncommitted working tree — "Forget saved split" plus an "apply to every occurrence" switch.
+preview, "Merge syllables", "Split at" a character index, "Restore automatic", "Forget saved
+split", and an "apply to every occurrence" switch.
 
 Applying a split marks the word `manual`, maps the new texts onto existing syllable objects by
 index (preserving syllable IDs, and therefore part cues and timing references), creates new
-syllables for extra pieces, and prunes annotations that referenced removed syllables. In the
-committed version this runs through `handleUpdateWordSyllables`
-(`src/components/SongEditor.tsx:625`); the uncommitted version routes it through
-`applyWordSyllables` in `src/lib/lineText.ts:157`, which also supports the whole-song case. See
-[../future/README.md](../future/README.md) for what is not shipped.
+syllables for extra pieces, and prunes annotations that referenced removed syllables. The edit
+runs through `applyWordSyllables` in `src/lib/lineText.ts`, which supports both the single-word
+case and the whole-song case (every occurrence of the same word is split at once when the
+"apply everywhere" switch is on). Saved splits are remembered per device in
+`src/lib/syllableDictionary.ts` (localStorage) until the backend migration lands.
 
 ## Rehearsal renderers
 
@@ -87,15 +87,16 @@ a malformed song renders.
 This matters because the same `section.id` can appear several times in one page. A bare
 `section.id` key or DOM id would collide.
 
-### Roadmap and scroll-spy
+### Arrangement rail and scroll-spy
 
 `ArrangementRoadmap` lists the resolved rows in performance order, labels repeats as
 `"<name> · repeat N"`, and scrolls to `rehearsal-<renderIdentity>` on click
-(`src/components/ArrangementRoadmap.tsx:39`, `:44`). It is a bottom sheet under `lg` and a
-sticky `<aside>` at `lg` and above (`:46`).
+(`src/components/ArrangementRoadmap.tsx`). The heading reads **Arrangement** (it was "Roadmap"
+until 2026-10-31). On phones `ArrangementMobileBar` renders the same trigger above the song
+title, so the rail is not a long scroll away; the desktop aside is pinned flush to the right edge
+of the viewport (`lg:grid-cols-[minmax(0,1fr)_17rem]`, no centering container).
 
-The active-row highlight is an `IntersectionObserver` created in a `useEffect`
-(`src/components/ArrangementRoadmap.tsx:14`). Its options are:
+The active-row highlight is an `IntersectionObserver` created in a `useEffect`.
 
 ```ts
 { rootMargin: "-80px 0px -65% 0px", threshold: [0, 0.1, 0.5] }
