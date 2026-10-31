@@ -39,7 +39,7 @@ function VoiceLaneValue({
   const value = syllable[part] ?? "";
 
   return (
-    <span className="inline-flex h-9 w-10 min-w-10 items-center justify-center rounded-md border border-border bg-muted/40 px-1.5 py-2 text-center text-[0.82rem] font-medium text-foreground sm:h-8 sm:w-10 sm:min-w-10 sm:py-1.5 sm:text-[0.78rem]">
+    <span className="inline-flex h-7 w-8 min-w-8 items-center justify-center rounded-md border border-border bg-muted/40 px-1 py-1 text-center text-[0.72rem] font-medium text-foreground sm:h-8 sm:w-10 sm:min-w-10 sm:px-1.5 sm:py-1.5 sm:text-[0.78rem]">
       {value.trim() || "\u00a0"}
     </span>
   );
@@ -99,7 +99,7 @@ function ReadOnlyVoiceLanes({
         return (
         <Fragment key={row.key}>
           <div
-            className={`sticky left-0 z-30 grid h-7 w-7 place-items-center rounded-md border text-[0.65rem] font-semibold sm:h-8 sm:w-8 sm:text-xs ${
+            className={`sticky left-0 z-30 grid h-6 w-6 place-items-center rounded-md border text-[0.6rem] font-semibold sm:h-8 sm:w-8 sm:text-xs ${
               labelClass[row.key]
             }`}
             style={{ gridColumn: 1, gridRow }}
@@ -182,7 +182,7 @@ function RehearsalLine({
   return (
     <div data-line-block="true" className="rehearsal-line line-block w-full overflow-hidden py-5">
       <LineScroll>
-        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-[var(--line-col-gap,0.375rem)] gap-y-0.5 pr-3" style={gridStyle}>
+        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-[var(--line-col-gap,0.375rem)] gap-y-0.5 pr-1 sm:pr-3" style={gridStyle}>
           {placedTechniqueRanges.map((range) => {
             const technique = getTechniqueById(range.techniqueId);
 
