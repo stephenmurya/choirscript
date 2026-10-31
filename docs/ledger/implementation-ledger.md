@@ -165,6 +165,36 @@ future invalid option degrades to a missing scroll-spy instead of a blank page
 Unverified: no regression test was added, and nothing prevents a future `rem` value in that
 option. Verification today is code inspection plus the commit.
 
+## Live share links and mobile rehearsal density
+
+Delivered after `974fa80`. Recorded in [ADR-0011](../adr/ADR-0011-live-share-links.md), which
+supersedes ADR-0006.
+
+- **Shares are mutable.** `put()` for `shares/<id>.json` now uses `allowOverwrite: true`; the editor
+  republishes 2 s after the last change (`SHARE_PUBLISH_DEBOUNCE_MS` in
+  `src/components/SongEditor.tsx`). The song document carries `share: { id, editToken, publishedAt }`
+  so any signed-in device can republish (`normalizeSong` preserves it; the public payload strips it).
+- **Editing needs the token.** `shares/<id>.key.json` stores it; `publishSharedSong` compares before
+  writing and the route answers 403 otherwise.
+- **Polls are cheap.** `shares/<id>.rev.json` is `{ revision, updatedAt }`; `SharedSongLive` polls
+  `/api/share/<id>/rev` every 3 s, pauses on hidden tabs, checks again on `visibilitychange`, and only
+  fetches the payload when the revision moved. The swap is in place — no reload, scroll preserved.
+- **No CDN staleness.** `getSharedSong` reads with `useCache: false`; both API routes are
+  `force-dynamic` and answer `cache-control: no-store`.
+- **Copy changed.** The "changes to the original song do not update this link" paragraph and the
+  snapshot-date badge are gone, replaced by a `Live` badge and an "Updated …" stamp. The dialog says
+  the link follows the song.
+- **Mobile density.** `.line-block` on `max-width: 640px` now sets `--line-label-col: 1.75rem`,
+  `--syllable-col-min: 1.9rem`, `--syllable-pad: 0.25rem`, `--syllable-min-h: 1.75rem`,
+  `--line-col-gap: 0.1875rem`, and `--timing-unit-width: 2.25rem`; the part-lane chip is `h-7 w-7`.
+  Type size is unchanged — the space between boxes is what shrank, so lines fit a phone portrait
+  without rotating.
+
+Unverified: republishing from the editor was not exercised against a signed-in session (no
+credentials in this environment); the API create/publish/poll path and the in-place swap were
+exercised directly, and the server-side token check was read rather than attacked. No test suite
+exists to lock any of this down.
+
 ## Unverified across the whole project
 
 These are not phase-specific; they are things no artifact in the repository proves.

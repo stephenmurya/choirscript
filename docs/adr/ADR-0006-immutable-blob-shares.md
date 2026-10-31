@@ -1,6 +1,8 @@
 # ADR-0006: Share links are immutable JSON snapshots in Vercel Blob
 
-Status: Accepted
+Status: **Superseded by [ADR-0011](ADR-0011-live-share-links.md)** — share links are a moving head
+and the editor republishes on save. The mechanics below (Blob storage, payload shape, schemaVersion
+2) still apply; only the "write once" guarantee is gone.
 Recorded: 2026-10-31, derived from code at commit `a79c7b1`. First implemented in `d8dbf1d`
 (2026-07-10, "Update: Added shareable links"), later reshaped for schemaVersion 2.
 

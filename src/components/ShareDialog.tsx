@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, ExternalLink, Loader2, Share2 } from "lucide-react";
+import { Copy, ExternalLink, Loader2, Radio, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Song } from "@/lib/songTypes";
+import type { Song, SongShare } from "@/lib/songTypes";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,32 +20,44 @@ type ShareDialogProps = {
   song: Song | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Persist the new link + edit token onto the song so saves can republish. */
+  onShareCreated?: (share: SongShare) => void;
 };
 
 type ShareResponse = {
   shareId: string;
+  editToken?: string;
+  revision?: number;
   url: string;
   error?: string;
   diagnostic?: string;
 };
 
-export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
+export function ShareDialog({ song, open, onOpenChange, onShareCreated }: ShareDialogProps) {
   const [shareUrl, setShareUrl] = useState("");
   const [isCreating, setIsCreating] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const existingShare = song?.share ?? null;
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
+    const existingUrl =
+      existingShare && typeof window !== "undefined"
+        ? `${window.location.origin}/s/${existingShare.id}`
+        : "";
+
     const resetId = window.setTimeout(() => {
-      setShareUrl("");
+      setShareUrl(existingUrl);
       setIsCreating(false);
+      setIsPublishing(false);
     }, 0);
 
     return () => window.clearTimeout(resetId);
-  }, [open, song?.id]);
+  }, [open, song?.id, existingShare]);
 
   async function copyShareLink(url = shareUrl) {
     if (!url) {
@@ -88,13 +100,50 @@ export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
       }
 
       setShareUrl(result.url);
-      toast.success("Share link created");
+
+      if (result.editToken) {
+        onShareCreated?.({
+          id: result.shareId,
+          editToken: result.editToken,
+          publishedAt: new Date().toISOString(),
+        });
+      }
+
+      toast.success("Live link created");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not create share link",
       );
     } finally {
       setIsCreating(false);
+    }
+  }
+
+  /** Manual publish — the editor already republishes automatically on save. */
+  async function publishNow() {
+    if (!song || !existingShare) {
+      return;
+    }
+
+    setIsPublishing(true);
+
+    try {
+      const response = await fetch(`/api/share/${existingShare.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ editToken: existingShare.editToken, song }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        throw new Error(result.error || "Could not publish the latest version");
+      }
+
+      toast.success("Latest version published");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not publish");
+    } finally {
+      setIsPublishing(false);
     }
   }
 
@@ -115,15 +164,21 @@ export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
           <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">View-only</Badge>
+              {existingShare ? (
+                <Badge variant="secondary" className="gap-1">
+                  <Radio className="size-3" />
+                  Live
+                </Badge>
+              ) : null}
               <span>{song?.title || "Untitled Song"}</span>
             </div>
             <p className="mt-3">
-              Anyone with this link can open the rehearsal view and print it. They cannot edit
-              your song.
+              Anyone with this link can open the rehearsal view and print it. They cannot edit your
+              song.
             </p>
             <p className="mt-2">
-              This link keeps the song exactly as it is right now. If you make changes later,
-              create a new link to share the updated version.
+              The link always shows the current version: when you save, open rehearsal pages update
+              on their own within a few seconds.
             </p>
           </div>
 
@@ -147,8 +202,8 @@ export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Send this link to anyone who needs the rehearsal sheet. This version will stay the
-                same, even if you keep editing your song.
+                Send this link to anyone who needs the rehearsal sheet. It stays the same link as
+                your song changes.
               </p>
             </div>
           ) : (
@@ -165,6 +220,14 @@ export function ShareDialog({ song, open, onOpenChange }: ShareDialogProps) {
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Close
               </Button>
+              {existingShare ? (
+                <Button type="button" variant="outline" disabled={isPublishing} onClick={publishNow}>
+                  {isPublishing ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : null}
+                  {isPublishing ? "Publishing..." : "Publish now"}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 onClick={() => window.open(shareUrl, "_blank", "noopener,noreferrer")}

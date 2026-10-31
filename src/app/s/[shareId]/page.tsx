@@ -2,57 +2,13 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { FileQuestion } from "lucide-react";
 import { getSharedSong } from "@/lib/share-store";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AdvancedTimingRehearsalView } from "@/components/AdvancedTimingRehearsalView";
-import { ColorfulRehearsalView, type RehearsalDisplayToggles } from "@/components/ColorfulRehearsalView";
-import { SharedPageActions } from "@/components/SharedPageActions";
-import { formatTempo } from "@/lib/songDisplay";
-import { getEnabledVoiceParts } from "@/lib/songSelection";
+import { SharedSongLive } from "@/components/SharedSongLive";
 
 type SharedSongPageProps = {
   params: Promise<{ shareId: string }>;
 };
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Fixed-format, locale-independent: this string is server-rendered. */
-function snapshotDate(iso: string) {
-  const date = new Date(iso);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-}
-
-const sharedToggles: RehearsalDisplayToggles = {
-  soprano: true,
-  alto: true,
-  tenor: true,
-  bass: true,
-  techniques: true,
-  directorNotes: true,
-  largeText: false,
-  blackAndWhite: false,
-  enabledParts: ["soprano", "alto", "tenor", "bass"],
-};
-
-function metadataLine(payload: Awaited<ReturnType<typeof getSharedSong>>) {
-  if (!payload) {
-    return "";
-  }
-
-  return [
-    payload.artist ? `Singer: ${payload.artist}` : null,
-    payload.key ? `Key: ${payload.key}` : null,
-    formatTempo(payload.bpm) || null,
-  ]
-    .filter(Boolean)
-    .join(", ");
-}
 
 /**
  * Dynamic browser/social preview for shared snapshots. Uses the actual shared
@@ -106,7 +62,7 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
               </div>
               <CardTitle>This ChoirScript link is unavailable.</CardTitle>
               <CardDescription>
-                The snapshot may have been removed, mistyped, or never created.
+                The link may have been removed or mistyped.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -120,47 +76,7 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
     );
   }
 
-  const song = payload.song;
-  const sharedViewToggles = { ...sharedToggles, enabledParts: getEnabledVoiceParts(song) };
-
-  return (
-    <main className="min-h-svh overflow-x-clip bg-background text-foreground">
-      <header className="no-print border-b border-border bg-background px-3 py-4 sm:px-5">
-        <div className="mx-auto flex max-w-[1100px] flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="min-w-0">
-            <Link href="/" className="inline-flex items-center gap-3">
-              <span className="grid size-9 place-items-center rounded-2xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-                CS
-              </span>
-              <span>
-                <span className="block text-sm font-semibold text-foreground">ChoirScript</span>
-                <span className="block text-xs text-muted-foreground">Shared rehearsal script</span>
-              </span>
-            </Link>
-            <div className="mt-5 flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-semibold text-foreground">{payload.title}</h1>
-              <Badge variant="outline">Read-only</Badge>
-              {snapshotDate(payload.createdAt) ? (
-                <Badge variant="secondary">Snapshot from {snapshotDate(payload.createdAt)}</Badge>
-              ) : null}
-            </div>
-            {metadataLine(payload) ? (
-              <p className="mt-1 text-sm text-muted-foreground">{metadataLine(payload)}</p>
-            ) : null}
-            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-              Anyone with this link can view this read-only snapshot. Changes to the original song
-              do not update this link automatically.
-            </p>
-          </div>
-          <SharedPageActions />
-        </div>
-      </header>
-
-      {song.mode === "advanced" ? (
-        <AdvancedTimingRehearsalView song={song} toggles={sharedViewToggles} />
-      ) : (
-        <ColorfulRehearsalView song={song} toggles={sharedViewToggles} />
-      )}
-    </main>
-  );
+  // Everything below the fetch is live: the client component keeps the page in
+  // sync with the song and swaps revisions in place, without a reload.
+  return <SharedSongLive initialPayload={payload} />;
 }

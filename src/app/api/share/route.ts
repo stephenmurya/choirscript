@@ -107,6 +107,8 @@ export async function POST(request: Request) {
     const share = await createSharedSong(parsed.song);
     return Response.json({
       shareId: share.shareId,
+      editToken: share.editToken,
+      revision: share.revision,
       url: new URL(share.url, request.url).toString(),
     });
   } catch (error) {

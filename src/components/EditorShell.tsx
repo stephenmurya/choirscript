@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, Copy, Ellipsis, Eye, FileUp, Redo2, Settings2, Share2, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Song } from "@/lib/songTypes";
+import type { Song, SongShare } from "@/lib/songTypes";
 import { useWorkspaceSongs } from "./WorkspaceSongsContext";
 import { ShareDialog } from "./ShareDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -27,6 +27,7 @@ type EditorShellProps = {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  onShareCreated?: (share: SongShare) => void;
   children: ReactNode;
 };
 
@@ -41,6 +42,7 @@ export function EditorShell({
   canRedo = false,
   onUndo,
   onRedo,
+  onShareCreated,
   children,
 }: EditorShellProps) {
   const router = useRouter();
@@ -109,7 +111,12 @@ export function EditorShell({
         {song ? <EditorNav activeNav={activeNav} onNavChange={onNavChange} variant="mobile" /> : null}
       </header>
       <main className="min-w-0 overflow-x-clip">{children}</main>
-      <ShareDialog song={song} open={isShareOpen} onOpenChange={setIsShareOpen} />
+      <ShareDialog
+        song={song}
+        open={isShareOpen}
+        onOpenChange={setIsShareOpen}
+        onShareCreated={onShareCreated}
+      />
       <ConfirmDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen} title={`Delete ${song?.title || "Untitled Song"}?`} description="This removes the song from your workspace and cannot be undone." confirmLabel="Delete song" destructive onConfirm={handleDelete} />
     </div>
   );

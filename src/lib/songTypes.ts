@@ -204,6 +204,19 @@ export type Song = {
   updatedAt: string;
   /** Song aggregate schema version (see migration in songStorage.ts). */
   schemaVersion: 2;
+  /**
+   * Live share publication. When present, the public link at /s/<share.id>
+   * always renders the current version of this song; the editor republishes on
+   * save and open rehearsal pages swap the new version in without a reload.
+   */
+  share?: SongShare;
+};
+
+export type SongShare = {
+  id: string;
+  /** Only the owner's browser knows this; required to republish the link. */
+  editToken: string;
+  publishedAt: string;
 };
 
 export type SharedSongPayload = {
@@ -211,11 +224,19 @@ export type SharedSongPayload = {
   shareId: string;
   createdAt: string;
   updatedAt: string;
+  /** Monotonic publication counter. Viewers poll this to detect changes. */
+  revision: number;
   title: string;
   artist?: string;
   key?: string;
   bpm?: string;
   song: Song;
+};
+
+/** Tiny mutable head written next to the payload; the poll target. */
+export type SharedSongRevision = {
+  revision: number;
+  updatedAt: string;
 };
 
 export type PartKey = "soprano" | "alto" | "tenor" | "bass";

@@ -99,7 +99,7 @@ function ReadOnlyVoiceLanes({
         return (
         <Fragment key={row.key}>
           <div
-            className={`sticky left-0 z-30 grid h-9 w-9 place-items-center rounded-md border text-xs font-semibold sm:h-8 sm:w-8 ${
+            className={`sticky left-0 z-30 grid h-7 w-7 place-items-center rounded-md border text-[0.65rem] font-semibold sm:h-8 sm:w-8 sm:text-xs ${
               labelClass[row.key]
             }`}
             style={{ gridColumn: 1, gridRow }}
@@ -182,7 +182,7 @@ function RehearsalLine({
   return (
     <div data-line-block="true" className="rehearsal-line line-block w-full overflow-hidden py-5">
       <LineScroll>
-        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-0.5 pr-3" style={gridStyle}>
+        <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-[var(--line-col-gap,0.375rem)] gap-y-0.5 pr-3" style={gridStyle}>
           {placedTechniqueRanges.map((range) => {
             const technique = getTechniqueById(range.techniqueId);
 
@@ -227,7 +227,7 @@ function RehearsalLine({
               <span
                 key={`${renderIdentity}:${flat.id}`}
                 style={{ gridColumn: flat.absoluteIndex + 2, gridRow: lyricGridRow }}
-                className={`min-h-8 w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-2 text-center text-[0.96rem] font-medium leading-none text-foreground ${
+                className={`min-h-[var(--syllable-min-h,2rem)] w-max min-w-[var(--syllable-col-min,2.75rem)] justify-self-center whitespace-nowrap rounded-[6px] border p-[var(--syllable-pad,0.5rem)] text-center text-[0.96rem] font-medium leading-none text-foreground ${
                   technique
                     ? `${technique.highlightClass} ${technique.borderClass} shadow-sm`
                     : "border-transparent"

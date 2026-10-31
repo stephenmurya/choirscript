@@ -206,9 +206,25 @@ body {
   page-break-inside: avoid;
 }
 
+/*
+ * Phones are the primary rehearsal screen, and folded words used to push the
+ * rest of a line off-screen (people were rotating to landscape to read it).
+ * Squeeze the label column, the cells and the gaps instead of the type size:
+ * more syllables per line, same legibility.
+ */
 @media (max-width: 640px) {
   .line-block {
-    --timing-unit-width: 3rem;
+    --timing-unit-width: 2.25rem;
+    --line-label-col: 1.75rem;
+    --syllable-col-min: 1.9rem;
+    --syllable-pad: 0.25rem;
+    --syllable-min-h: 1.75rem;
+    --line-col-gap: 0.1875rem;
+  }
+
+  .rehearsal-document {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 }
 

@@ -59,6 +59,7 @@ import type {
   LyricSelection,
   PartKey,
   Song,
+  SongShare,
   SongMode,
   SongTimingSettings,
   TimingScope,
@@ -87,6 +88,12 @@ type SongEditorProps = {
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "failed";
 
 const AUTOSAVE_DEBOUNCE_MS = 700;
+/**
+ * Republishing is slower than autosave on purpose: a burst of typing should
+ * reach the live link once, not thirty times. Two seconds still reads as "live"
+ * to someone standing in front of a phone.
+ */
+const SHARE_PUBLISH_DEBOUNCE_MS = 2000;
 
 export function SongEditor({ songId }: SongEditorProps) {
   const router = useRouter();
@@ -118,6 +125,8 @@ export function SongEditor({ songId }: SongEditorProps) {
   // Mirrors the live song so updateSong/undo/redo never read a stale document.
   const songRef = useRef<Song | null>(null);
   const historyRef = useRef<EditorHistory>(createHistory());
+  const lastPublishedRef = useRef<string | null>(null);
+  const publishTimerRef = useRef<number | null>(null);
   const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 });
   const editorView = searchParams.get("view") === "parts" || searchParams.get("view") === "arrangement" ? "parts" : "lyrics";
   // Simple timing is the default; the nav shows where the song actually is.
@@ -167,6 +176,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         setIncludeBass(getEnabledVoiceParts(normalizedSong).includes("bass"));
         setActiveSectionId(normalizedSong.source.sections[0]?.id ?? null);
         hasLoaded.current = true;
+        lastPublishedRef.current = null;
         setSaveState("saved");
       })
       .catch((error) => {
@@ -248,6 +258,74 @@ export function SongEditor({ songId }: SongEditorProps) {
     songRef.current = next;
     setSong(next);
     setSaveState("dirty");
+  }
+
+  /**
+   * Push the current song to its live share link. Runs off the same song state
+   * the autosave uses, so a choir reading the link is never more than a couple
+   * of seconds behind the editor.
+   */
+  const publishShare = useCallback(async (current: Song, share: SongShare) => {
+    try {
+      const response = await fetch(`/api/share/${share.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ editToken: share.editToken, song: current }),
+      });
+
+      if (!response.ok) {
+        const result = (await response.json()) as { error?: string };
+        console.error("Share publish failed", result.error ?? response.status);
+      }
+    } catch (error) {
+      console.error("Share publish failed", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const current = song;
+    const share = current?.share;
+
+    if (!current || !share || !hasLoaded.current) {
+      return;
+    }
+
+    const signature = current.updatedAt;
+
+    // The first render after loading a song only establishes the baseline: we
+    // publish on edits, never just because the editor opened the song.
+    if (lastPublishedRef.current === null) {
+      lastPublishedRef.current = signature;
+      return;
+    }
+
+    if (lastPublishedRef.current === signature) {
+      return;
+    }
+
+    if (publishTimerRef.current) {
+      window.clearTimeout(publishTimerRef.current);
+    }
+
+    publishTimerRef.current = window.setTimeout(() => {
+      lastPublishedRef.current = signature;
+      void publishShare(current, share);
+    }, SHARE_PUBLISH_DEBOUNCE_MS);
+
+    return () => {
+      if (publishTimerRef.current) {
+        window.clearTimeout(publishTimerRef.current);
+      }
+    };
+  }, [song, publishShare]);
+
+  /**
+   * Persist the freshly minted link onto the song. The token is stored on the
+   * song document (not localStorage), so any device the owner signs in from can
+   * keep the link up to date.
+   */
+  function handleShareCreated(share: SongShare) {
+    updateSong((current) => ({ ...current, share }));
   }
 
   function recordHistory(previous: Song) {
@@ -898,6 +976,7 @@ export function SongEditor({ songId }: SongEditorProps) {
         canRedo={historyCounts.redo > 0}
         onUndo={undo}
         onRedo={redo}
+        onShareCreated={handleShareCreated}
       >
         {content}
       </EditorShell>
