@@ -13,6 +13,7 @@ import { ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { TechniqueLegend } from "./TechniqueLegend";
+import { LineScroll } from "./LineScroll";
 import { formatTempo } from "@/lib/songDisplay";
 
 export type RehearsalDisplayToggles = {
@@ -55,8 +56,17 @@ function ReadOnlyVoiceLanes({
   renderIdentity: string;
 }) {
   const syllables = flattenLineSyllables(line);
+  // A part lane is only worth its row when this line actually sings something
+  // in that part: an empty lane is pure noise on a phone screen, where every
+  // row steals vertical space from the lyrics underneath it.
   const rows = PART_LABELS.filter((part) => {
-    return toggles.enabledParts.includes(part.key) && toggles[part.key];
+    if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+      return false;
+    }
+
+    return syllables.some((flat) =>
+      Boolean(flat.word.syllables[flat.syllableIndex][part.key]?.trim()),
+    );
   });
   const labelClass: Record<PartKey, string> = {
     soprano: "border-cyan-400/40 bg-cyan-500/10 text-cyan-200 shadow-[8px_0_12px_-10px_rgba(0,0,0,0.65)]",
@@ -157,10 +167,7 @@ function RehearsalLine({
 
   return (
     <div data-line-block="true" className="rehearsal-line line-block w-full overflow-hidden py-5">
-      <div
-        data-line-scroll="true"
-        className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
-      >
+      <LineScroll>
         <div className="line-grid-shell grid w-max min-w-0 items-end gap-x-1.5 gap-y-0.5 pr-3" style={gridStyle}>
           {placedTechniqueRanges.map((range) => {
             const technique = getTechniqueById(range.techniqueId);
@@ -224,7 +231,7 @@ function RehearsalLine({
             renderIdentity={renderIdentity}
           />
         </div>
-      </div>
+      </LineScroll>
       {toggles.directorNotes ? (
         <DirectorNotes line={line} renderIdentity={renderIdentity} />
       ) : null}
@@ -240,9 +247,9 @@ export function ColorfulRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-[1280px] items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
+    <div className="mx-auto grid w-full min-w-0 max-w-[1280px] grid-cols-1 items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
     <article
-      className={`rehearsal-document w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
+      className={`rehearsal-document w-full min-w-0 max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >

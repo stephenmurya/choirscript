@@ -14,6 +14,7 @@ import { ScriptPill } from "./ScriptPill";
 import { TechniqueLegend } from "./TechniqueLegend";
 import { TimingGrid } from "./TimingGrid";
 import { TimingLegend } from "./TimingLegend";
+import { LineScroll } from "./LineScroll";
 import type { RehearsalDisplayToggles } from "./ColorfulRehearsalView";
 import { formatTempo } from "@/lib/songDisplay";
 
@@ -123,17 +124,21 @@ function RehearsalTimingLine({
   const sharedEvents = getEventsForScope(lineTiming, "shared").toSorted(
     (a, b) => getEventAbsoluteStart(a, lineTiming.bars) - getEventAbsoluteStart(b, lineTiming.bars),
   );
+  // Only parts that actually have events in this line earn a row. An enabled
+  // part with no content used to draw an empty label-only lane on every line,
+  // which eats the phone viewport without telling the singer anything.
   const rows = PART_LABELS.filter((part) => {
-    return toggles.enabledParts.includes(part.key) && toggles[part.key];
+    if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+      return false;
+    }
+
+    return getEventsForScope(lineTiming, part.key as TimingScope).length > 0;
   });
   const partRowStart = 5;
 
   return (
     <div data-line-block="true" className="rehearsal-line line-block w-full overflow-hidden py-5">
-      <div
-        data-line-scroll="true"
-        className="line-scroll max-w-full overflow-x-auto overscroll-x-contain pb-2"
-      >
+      <LineScroll>
         <TimingGrid totalUnits={units}>
           <RowLabel row={1}>Bar</RowLabel>
           {lineTiming.bars.map((bar, index) => {
@@ -248,7 +253,7 @@ function RehearsalTimingLine({
             );
           })}
         </TimingGrid>
-      </div>
+      </LineScroll>
       <span className="sr-only">{sectionId}</span>
     </div>
   );
@@ -262,9 +267,9 @@ export function AdvancedTimingRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
-    <div className="mx-auto grid w-full max-w-[1280px] items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
+    <div className="mx-auto grid w-full min-w-0 max-w-[1280px] grid-cols-1 items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
     <article
-      className={`rehearsal-document w-full max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
+      className={`rehearsal-document w-full min-w-0 max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >
