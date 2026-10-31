@@ -134,7 +134,10 @@ function RehearsalTimingLine({
   const rows = melodyPart
     ? PART_LABELS.filter((part) => part.key === melodyPart)
     : PART_LABELS.filter((part) => {
-        if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+        // Content wins over the voice preset — see ReadOnlyVoiceLanes: a part with
+        // events must render even when a saved preset or enabledParts list does
+        // not mention it.
+        if (!toggles[part.key]) {
           return false;
         }
 

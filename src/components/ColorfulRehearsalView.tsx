@@ -67,7 +67,12 @@ function ReadOnlyVoiceLanes({
   const rows = melodyPart
     ? PART_LABELS.filter((part) => part.key === melodyPart)
     : PART_LABELS.filter((part) => {
-        if (!toggles.enabledParts.includes(part.key) || !toggles[part.key]) {
+        // Content wins over the voice preset: a part that actually has notes must
+        // never be hidden because the song's preset (or a stale saved
+        // enabledParts list) does not mention it. Missing lanes on a shared link
+        // were exactly this — the preset said "soprano only", the notes were in
+        // alto, and every line rendered lyrics with no lanes at all.
+        if (!toggles[part.key]) {
           return false;
         }
 

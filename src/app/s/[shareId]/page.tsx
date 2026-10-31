@@ -15,6 +15,19 @@ type SharedSongPageProps = {
   params: Promise<{ shareId: string }>;
 };
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Fixed-format, locale-independent: this string is server-rendered. */
+function snapshotDate(iso: string) {
+  const date = new Date(iso);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+}
+
 const sharedToggles: RehearsalDisplayToggles = {
   soprano: true,
   alto: true,
@@ -127,6 +140,9 @@ export default async function SharedSongPage({ params }: SharedSongPageProps) {
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <h1 className="truncate text-2xl font-semibold text-foreground">{payload.title}</h1>
               <Badge variant="outline">Read-only</Badge>
+              {snapshotDate(payload.createdAt) ? (
+                <Badge variant="secondary">Snapshot from {snapshotDate(payload.createdAt)}</Badge>
+              ) : null}
             </div>
             {metadataLine(payload) ? (
               <p className="mt-1 text-sm text-muted-foreground">{metadataLine(payload)}</p>
