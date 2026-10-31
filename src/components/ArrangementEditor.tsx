@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   DndContext,
   PointerSensor,
@@ -64,6 +64,7 @@ type ArrangementEditorProps = {
   onDuplicateSection: (sourceSectionId: string) => void;
   onSetOccurrenceRepeatCount: (occurrenceId: string, repeatCount: number) => void;
   onEditSource: (sourceSectionId: string) => void;
+  resizeHandle?: ReactNode;
 };
 
 function SectionPicker({
@@ -180,7 +181,7 @@ function SortableRow({
       <div className="flex items-start gap-1.5">
         <button
           type="button"
-          className="-ml-0.5 mt-0.5 grid size-6 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/60 transition hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          className="-ml-1 grid size-5 shrink-0 cursor-grab place-items-center rounded-md text-muted-foreground/60 transition hover:bg-muted hover:text-foreground active:cursor-grabbing"
           aria-label={`Drag ${section.name}`}
           {...attributes}
           {...listeners}
@@ -188,7 +189,7 @@ function SortableRow({
           <GripVertical className="size-3.5" />
         </button>
 
-        <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-muted text-[10px] font-semibold tabular-nums text-muted-foreground">
+        <span className="grid size-5 shrink-0 place-items-center rounded-md bg-muted text-[10px] font-semibold tabular-nums text-muted-foreground">
           {index + 1}
         </span>
 
@@ -197,7 +198,7 @@ function SortableRow({
             <button
               type="button"
               onClick={() => onEditSource(section.id)}
-              className="min-w-0 truncate text-left text-[13px] font-semibold leading-5 text-foreground transition hover:text-primary"
+              className="min-w-0 truncate text-left text-xs font-semibold leading-5 text-foreground transition hover:text-primary"
               title={`Edit ${section.name}`}
             >
               {section.name}
@@ -211,7 +212,7 @@ function SortableRow({
 
           {isEditing ? (
             <div className="mt-1.5 space-y-1">
-              <label className="flex items-center gap-1.5">
+              <label className="flex min-w-0 items-center gap-1">
                 <UserRound className="size-3 shrink-0 text-muted-foreground" />
                 <input
                   aria-label={`Who sings ${section.name} placement ${index + 1}`}
@@ -224,7 +225,7 @@ function SortableRow({
                     }
                   }}
                   placeholder="Who sings this? Lead, Backups…"
-                  className="h-7 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+                  className="h-7 w-full min-w-0 rounded-md border border-border bg-background px-1.5 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
                 />
               </label>
               <input
@@ -232,16 +233,16 @@ function SortableRow({
                 value={occurrence.note ?? ""}
                 onChange={(event) => onSetOccurrenceNote(occurrence.id, event.target.value)}
                 placeholder="Note (optional)"
-                className="h-7 w-full rounded-md border border-border bg-background px-2 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+                className="h-7 w-full min-w-0 rounded-md border border-border bg-background px-1.5 text-[11px] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {/* Unison vs harmony: "melody" means the whole section sings the
                   one line carried by melodyPart, so rehearsal shows a single lane. */}
-              <div className="flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
+              <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
                 <button
                   type="button"
                   onClick={() => onSetOccurrenceVoicing(occurrence.id, "harmony", occurrence.melodyPart)}
                   aria-pressed={occurrence.voicing !== "melody"}
-                  className={`flex-1 rounded px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] transition ${
+                  className={`flex-1 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] transition ${
                     occurrence.voicing !== "melody"
                       ? "bg-muted text-foreground"
                       : "text-muted-foreground hover:text-foreground"
@@ -255,7 +256,7 @@ function SortableRow({
                     onSetOccurrenceVoicing(occurrence.id, "melody", occurrence.melodyPart ?? "soprano")
                   }
                   aria-pressed={occurrence.voicing === "melody"}
-                  className={`flex-1 rounded px-1.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] transition ${
+                  className={`flex-1 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] transition ${
                     occurrence.voicing === "melody"
                       ? "bg-emerald-500/20 text-emerald-200"
                       : "text-muted-foreground hover:text-foreground"
@@ -267,7 +268,7 @@ function SortableRow({
               {occurrence.voicing === "melody" ? (
                 <div className="flex items-center gap-1">
                   <span className="shrink-0 text-[10px] text-muted-foreground">Melody line</span>
-                  <div className="flex flex-1 items-center gap-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-0.5">
                     {PART_LABELS.filter((part) => enabledParts.includes(part.key)).map((part) => {
                       const active = (occurrence.melodyPart ?? "soprano") === part.key;
 
@@ -278,7 +279,7 @@ function SortableRow({
                           onClick={() => onSetOccurrenceVoicing(occurrence.id, "melody", part.key)}
                           aria-pressed={active}
                           title={`Melody on ${part.label}`}
-                          className={`grid h-6 flex-1 place-items-center rounded border text-[10px] font-semibold transition ${
+                          className={`grid h-[22px] flex-1 place-items-center rounded border text-[10px] font-semibold transition ${
                             active
                               ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-200"
                               : "border-border text-muted-foreground hover:text-foreground"
@@ -315,7 +316,39 @@ function SortableRow({
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+      </div>
+
+      {/* Controls live on their own row: squeezing repeat and four actions
+          beside the performer/note fields left no room for the text itself in a
+          22rem panel. */}
+      <div className="mt-1.5 flex items-center justify-between gap-1 border-t border-border/60 pt-1.5">
+        <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+          <span className="mr-0.5">Repeat</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            disabled={repeatCount <= 1}
+            onClick={() => onSetOccurrenceRepeatCount(occurrence.id, repeatCount - 1)}
+            aria-label="Decrease repeats"
+          >
+            <Minus />
+          </Button>
+          <span className="min-w-3 text-center text-[11px] font-semibold tabular-nums text-foreground">
+            {repeatCount}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => onSetOccurrenceRepeatCount(occurrence.id, repeatCount + 1)}
+            aria-label="Increase repeats"
+          >
+            <Plus />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-0.5 text-muted-foreground opacity-70 transition group-hover:opacity-100 focus-within:opacity-100">
           <Button
             type="button"
             variant="ghost"
@@ -357,30 +390,6 @@ function SortableRow({
             <Trash2 />
           </Button>
         </div>
-      </div>
-
-      <div className="mt-1.5 flex items-center justify-end gap-1.5 border-t border-border/60 pt-1.5 text-[11px] text-muted-foreground">
-        <span>Repeat</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          disabled={repeatCount <= 1}
-          onClick={() => onSetOccurrenceRepeatCount(occurrence.id, repeatCount - 1)}
-          aria-label="Decrease repeats"
-        >
-          <Minus />
-        </Button>
-        <span className="min-w-4 text-center font-semibold tabular-nums text-foreground">{repeatCount}</span>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          onClick={() => onSetOccurrenceRepeatCount(occurrence.id, repeatCount + 1)}
-          aria-label="Increase repeats"
-        >
-          <Plus />
-        </Button>
       </div>
     </li>
   );
@@ -445,7 +454,7 @@ function ArrangementPanelContent(props: ArrangementEditorProps) {
         />
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+      <div className="panel-scroll min-h-0 flex-1 overflow-y-auto pr-0.5">
         {arrangement && arrangement.occurrences.length > 0 ? (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -482,7 +491,7 @@ export function ArrangementEditor(props: ArrangementEditorProps) {
           >
             <span className="flex items-center gap-2">
               <ListMusic className="size-4" />
-              Arrangement roadmap
+              Arrangement
             </span>
             <ChevronDown className="size-4" />
           </SheetTrigger>
@@ -497,7 +506,8 @@ export function ArrangementEditor(props: ArrangementEditorProps) {
           </SheetContent>
         </Sheet>
       </div>
-      <aside className="no-print hidden min-w-0 xl:sticky xl:top-16 xl:order-3 xl:flex xl:h-[calc(100svh-4rem)] xl:flex-col xl:border-l xl:border-border/60 xl:px-4 xl:py-5">
+      <aside className="panel-scroll no-print relative hidden min-w-0 xl:sticky xl:top-16 xl:order-3 xl:flex xl:h-[calc(100svh-4rem)] xl:flex-col xl:border-l xl:border-border/60 xl:px-3.5 xl:py-5">
+        {props.resizeHandle}
         <ArrangementPanelContent {...props} />
       </aside>
     </>

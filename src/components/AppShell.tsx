@@ -122,7 +122,7 @@ export function AppShell({
 
   function renderNavbar() {
     return (
-      <header className="no-print sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+      <header className="no-print sticky top-0 z-30 border-b border-border bg-background">
         <div className="mx-auto flex min-h-14 w-full max-w-[1200px] items-center gap-2 px-3 sm:px-6">
           {/* LEFT: identity */}
           <Link href="/" className="flex min-w-0 items-center gap-3 rounded-2xl px-1 py-1">

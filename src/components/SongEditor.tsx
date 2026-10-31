@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import { toast } from "sonner";
 import { applyTechniqueToSyllables, removeTechniqueFromSyllableIds } from "@/lib/annotationUtils";
 import {
@@ -30,6 +30,8 @@ import {
   type EditorHistory,
 } from "@/lib/editorHistory";
 import { useHistoryHotkeys } from "@/lib/useHistoryHotkeys";
+import { usePanelWidth } from "@/lib/usePanelWidth";
+import { PanelResizeHandle } from "./PanelResizeHandle";
 import {
   appendOccurrence,
   countOccurrencesForSection,
@@ -72,10 +74,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DocumentScriptEditor } from "./DocumentScriptEditor";
-import { EditorShell } from "./EditorShell";
+import { EditorShell, type EditorNavItem } from "./EditorShell";
+import { SongSettingsDialog } from "./SongSettingsDialog";
 import { ArrangementEditor } from "./ArrangementEditor";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { EditorInspector } from "./EditorInspector";
 import { ImportReviewDialog } from "./ImportReviewDialog";
 import { WorkspaceSongsProvider } from "./WorkspaceSongsContext";
 type SongEditorProps = {
@@ -101,7 +103,14 @@ export function SongEditor({ songId }: SongEditorProps) {
   const [pendingDeleteSectionId, setPendingDeleteSectionId] = useState<string | null>(null);
   const [pendingDeleteLine, setPendingDeleteLine] = useState<{ sectionId: string; lineId: string } | null>(null);
   const [pendingLineEdit, setPendingLineEdit] = useState<{ sectionId: string; lineId: string; text: string } | null>(null);
-  const [isInspectorCollapsed, setIsInspectorCollapsed] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const arrangePanel = usePanelWidth({
+    storageKey: "choirscript.panel.arrangement.v1",
+    minRem: 22,
+    maxRem: 40,
+    initialRem: 22,
+  });
   const [pendingImportText, setPendingImportText] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [timingScope, setTimingScope] = useState<TimingScope>("shared");
@@ -111,6 +120,8 @@ export function SongEditor({ songId }: SongEditorProps) {
   const historyRef = useRef<EditorHistory>(createHistory());
   const [historyCounts, setHistoryCounts] = useState({ undo: 0, redo: 0 });
   const editorView = searchParams.get("view") === "parts" || searchParams.get("view") === "arrangement" ? "parts" : "lyrics";
+  // Simple timing is the default; the nav shows where the song actually is.
+  const activeNav: EditorNavItem = song?.mode === "advanced" ? "advanced" : editorView;
 
   const uid = user?.uid ?? null;
   const activeWorkspaceId = workspaceId;
@@ -561,6 +572,48 @@ export function SongEditor({ songId }: SongEditorProps) {
     if (lyrics.trim()) setPendingImportText(lyrics);
   }
 
+  function openImportPicker() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset first so picking the same file twice still fires a change event.
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      handleReviewImport(text);
+    } catch {
+      toast.error("Could not read that file. Try a plain .txt file.");
+    }
+  }
+
+  function handleNavChange(next: EditorNavItem) {
+    if (!song) {
+      return;
+    }
+
+    if (next === "advanced") {
+      if (song.mode !== "advanced") {
+        handleModeChange("advanced");
+      }
+      return;
+    }
+
+    if (song.mode === "advanced") {
+      handleModeChange("simple");
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", next);
+    router.replace(`/songs/${song.id}?${params.toString()}`);
+  }
+
   function handleApplyImport(lyrics: string, mode: "replace" | "append") {
     const parsed = parseLyricsInput(lyrics);
     if (parsed.sections.length === 0) return;
@@ -837,7 +890,10 @@ export function SongEditor({ songId }: SongEditorProps) {
       <EditorShell
         song={song}
         saveStatus={saveStatus}
-        activeView={editorView}
+        activeNav={activeNav}
+        onNavChange={handleNavChange}
+        onImportLyrics={openImportPicker}
+        onOpenSettings={() => setSettingsOpen(true)}
         canUndo={historyCounts.undo > 0}
         canRedo={historyCounts.redo > 0}
         onUndo={undo}
@@ -897,27 +953,25 @@ export function SongEditor({ songId }: SongEditorProps) {
       {/* Full-bleed shell: sidebars hug the page edges, the script stays in a
           readable column between them instead of everything floating inside a
           centered max-width container. */}
-      <div className={`grid w-full items-start pb-10 ${
-        editorView === "parts"
-          ? isInspectorCollapsed
-            ? "xl:grid-cols-[3.5rem_minmax(0,1fr)_22rem]"
-            : "xl:grid-cols-[17rem_minmax(0,1fr)_22rem]"
-          : isInspectorCollapsed
-            ? "xl:grid-cols-[3.5rem_minmax(0,1fr)]"
-            : "xl:grid-cols-[17rem_minmax(0,1fr)]"
-      }`}>
-      <EditorInspector
-        song={song}
-        view={editorView}
-        onMetadataChange={handleMetadataChange}
-        onReviewImport={handleReviewImport}
-        onModeChange={handleModeChange}
-        enabledParts={getEnabledVoiceParts(song)}
-        onVoiceSettingsChange={handleVoiceSettingsChange}
-        collapsed={isInspectorCollapsed}
-        onCollapsedChange={setIsInspectorCollapsed}
-      />
+      <div
+        className="editor-columns grid w-full items-start pb-10"
+        data-view={editorView}
+        style={
+          {
+            "--arrange-width": `${arrangePanel.width}px`,
+          } as CSSProperties
+        }
+      >
       {editorView === "parts" ? <ArrangementEditor
+          resizeHandle={
+            <PanelResizeHandle
+              edge="left"
+              label="Resize arrangement panel"
+              dragging={arrangePanel.dragging}
+              onPointerDown={(event) => arrangePanel.beginResize(event, -1)}
+              onReset={arrangePanel.reset}
+            />
+          }
           song={song}
           onAddOccurrence={handleAddOccurrence}
           onRemoveOccurrence={handleRemoveOccurrence}
@@ -974,6 +1028,25 @@ export function SongEditor({ songId }: SongEditorProps) {
       </div>
       </div>
       </div>
+      {/* Import lives in the header now: a file picker straight into the
+          review dialog, no sidebar panel to paste into. */}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".txt,.text,.md,.csv,text/plain"
+        onChange={handleImportFile}
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+      />
+      <SongSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        song={song}
+        onMetadataChange={handleMetadataChange}
+        enabledParts={getEnabledVoiceParts(song)}
+        onVoiceSettingsChange={handleVoiceSettingsChange}
+      />
       {(() => {
         const pendingSection = pendingDeleteSectionId ? song.source.sections.find((section) => section.id === pendingDeleteSectionId) : null;
         const usageCount = pendingSection ? countOccurrencesForSection(song, pendingSection.id) : 0;

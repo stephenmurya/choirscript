@@ -10,7 +10,7 @@ import {
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
 import { resolveArrangement } from "@/lib/arrangement";
-import { ArrangementRoadmap } from "./ArrangementRoadmap";
+import { ArrangementMobileBar, ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
 import { TechniqueLegend } from "./TechniqueLegend";
@@ -257,12 +257,13 @@ export function ColorfulRehearsalView({
   toggles: RehearsalDisplayToggles;
 }) {
   return (
-    <div className="mx-auto grid w-full min-w-0 max-w-[1280px] grid-cols-1 items-start lg:grid-cols-[minmax(0,900px)_16rem] lg:gap-8">
+    <div className="grid w-full min-w-0 grid-cols-1 items-start lg:grid-cols-[minmax(0,1fr)_17rem]">
     <article
-      className={`rehearsal-document w-full min-w-0 max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
+      className={`rehearsal-document mx-auto w-full min-w-0 max-w-[900px] px-3 pb-12 pt-6 sm:px-5 sm:pt-8 ${
         toggles.largeText ? "large-text" : ""
       } ${toggles.blackAndWhite ? "print-black-white" : ""}`}
     >
+      <ArrangementMobileBar song={song} />
       <header className="pb-8">
         <h1 className="rehearsal-title text-foreground">
           {song.title || "Untitled Song"}

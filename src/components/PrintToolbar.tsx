@@ -22,7 +22,7 @@ export function PrintToolbar({
   }
 
   return (
-    <div className="no-print sticky top-0 z-20 border-b border-border bg-background/90 px-3 py-3 backdrop-blur sm:px-4">
+    <div className="no-print sticky top-0 z-30 border-b border-border bg-background px-3 py-3 shadow-sm sm:px-4">
       <div className="mx-auto flex max-w-[900px] flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">

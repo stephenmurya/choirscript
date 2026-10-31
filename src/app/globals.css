@@ -57,12 +57,13 @@ body {
   overflow-x: clip;
 }
 
-button,
-input,
-textarea,
-select {
-  font: inherit;
-}
+/*
+ * No `font: inherit` override for form controls here: unlayered author CSS beats
+ * every Tailwind layer, so a bare rule defeated text-size utilities on inputs
+ * and buttons (they rendered at 16px inside 11px controls). Tailwind's preflight
+ * already sets `font: inherit` on form controls inside @layer base, so deleting
+ * this is a no-op for font family and lets utilities win again.
+ */
 
 ::selection {
   background: color-mix(in oklch, var(--primary) 35%, transparent);
@@ -97,6 +98,53 @@ select {
 .line-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in oklch, var(--foreground) 20%, transparent) transparent;
+}
+
+/*
+ * Editor and rehearsal sidebars. The platform scrollbar is a bright grey slab
+ * against the dark shell, so panels use a slim, rounded, theme-tinted thumb that
+ * only reads as a thumb (no track, no buttons, no corner box).
+ */
+.panel-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.panel-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel-scroll::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklch, var(--foreground) 16%, transparent);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 999px;
+}
+
+.panel-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklch, var(--foreground) 32%, transparent);
+}
+
+.panel-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/*
+ * Editor column widths come from a CSS variable so the arrangement handle can
+ * drag it. The lyrics view is a single centred script column; the parts view
+ * adds the arrangement panel on the right. Below xl the grid stays single column.
+ */
+@media (min-width: 80rem) {
+  .editor-columns[data-view="parts"] {
+    grid-template-columns: minmax(0, 1fr) var(--arrange-width, 22rem);
+  }
 }
 
 .line-scroll::-webkit-scrollbar {
