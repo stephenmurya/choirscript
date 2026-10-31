@@ -179,21 +179,32 @@ supersedes ADR-0006.
 - **Polls are cheap.** `shares/<id>.rev.json` is `{ revision, updatedAt }`; `SharedSongLive` polls
   `/api/share/<id>/rev` every 3 s, pauses on hidden tabs, checks again on `visibilitychange`, and only
   fetches the payload when the revision moved. The swap is in place — no reload, scroll preserved.
+- **Push replaced the poll.** The editor writes `shareHeads/<id>` (`{ shareId, revision, updatedAt }`)
+  after a publish commits — `publishShareHead` in `src/lib/shareHeads.ts`, called from
+  `publishShare()` in `SongEditor`, from `ShareDialog` at creation and from "publish now". Viewers
+  hold one `onSnapshot` via `subscribeShareHead`; the 3 s interval is gone. Focus/visibility still
+  triggers a single `/rev` catch-up for tabs that were asleep when the write landed. `firestore.rules`
+  allows `get` on `shareHeads/{id}` without auth and requires a signed-in editor to write; `list` and
+  `delete` are denied. The document is advisory — the Blob payload stays authoritative, so a bogus
+  head costs one wasted fetch. The Firestore SDK is imported dynamically inside `subscribeShareHead`
+  so it stays out of the route's first-load bundle.
 - **No CDN staleness.** `getSharedSong` reads with `useCache: false`; both API routes are
   `force-dynamic` and answer `cache-control: no-store`.
 - **Copy changed.** The "changes to the original song do not update this link" paragraph and the
   snapshot-date badge are gone, replaced by a `Live` badge and an "Updated …" stamp. The dialog says
   the link follows the song.
-- **Mobile density.** `.line-block` on `max-width: 640px` now sets `--line-label-col: 1.75rem`,
-  `--syllable-col-min: 1.9rem`, `--syllable-pad: 0.25rem`, `--syllable-min-h: 1.75rem`,
-  `--line-col-gap: 0.1875rem`, and `--timing-unit-width: 2.25rem`; the part-lane chip is `h-7 w-7`.
-  Type size is unchanged — the space between boxes is what shrank, so lines fit a phone portrait
-  without rotating.
+- **Mobile density.** `.line-block` on `max-width: 640px` now sets `--line-label-col: 1.5rem`,
+  `--syllable-col-min: 1.625rem`, `--syllable-pad: 0.125rem`, `--syllable-min-h: 1.625rem`,
+  `--line-col-gap: 0.125rem`, and `--timing-unit-width: 2.25rem`; the part-lane chip is `h-6 w-6` on
+  phones and the note box `h-7 w-8` (was `h-9 w-10`). Type size is unchanged — the space between
+  boxes is what shrank, so lines fit a phone portrait without rotating.
 
 Unverified: republishing from the editor was not exercised against a signed-in session (no
 credentials in this environment); the API create/publish/poll path and the in-place swap were
-exercised directly, and the server-side token check was read rather than attacked. No test suite
-exists to lock any of this down.
+exercised directly, and the server-side token check was read rather than attacked. The doorbell rules
+were exercised against the Firestore/Auth emulators (anonymous read allowed, anonymous write denied,
+workspace paths still denied, authenticated write pushed to a live listener) but not against the
+deployed project. No test suite exists to lock any of this down.
 
 ## Unverified across the whole project
 

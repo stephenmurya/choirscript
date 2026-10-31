@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import type { SharedSongPayload } from "@/lib/songTypes";
+import { subscribeShareHead } from "@/lib/shareHeads";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AdvancedTimingRehearsalView } from "@/components/AdvancedTimingRehearsalView";
@@ -14,10 +15,13 @@ import { getEnabledVoiceParts } from "@/lib/songSelection";
 
 /**
  * A shared link renders the live song, not a frozen copy: the editor republishes
- * on save and this view swaps the new revision in without a reload, so nobody
- * loses their place mid-rehearsal.
+ * on save and rings a Firestore doorbell, and this view swaps the new revision in
+ * without a reload so nobody loses their place mid-rehearsal.
+ *
+ * The doorbell is push-only — nothing moves while the song is idle. The one thing
+ * push cannot cover is a tab that was asleep or offline when the write landed, so
+ * returning to the tab does a single catch-up check.
  */
-const POLL_INTERVAL_MS = 3000;
 const UPDATED_FLASH_MS = 6000;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -55,11 +59,36 @@ export function SharedSongLive({ initialPayload }: { initialPayload: SharedSongP
   const shareIdRef = useRef(initialPayload.shareId);
   const flashTimer = useRef<number | null>(null);
 
-  const pullLatest = useCallback(async () => {
-    if (document.visibilityState !== "visible") {
-      return;
-    }
+  /** Pull the current payload and swap it in without a navigation. */
+  const fetchAndSwap = useCallback(async () => {
+    try {
+      const full = await fetch(`/api/share/${shareIdRef.current}`, { cache: "no-store" });
 
+      if (!full.ok) {
+        return;
+      }
+
+      const next = (await full.json()) as SharedSongPayload;
+
+      if (typeof next.revision === "number" && next.revision <= revisionRef.current) {
+        return;
+      }
+
+      revisionRef.current = next.revision;
+      setPayload(next);
+      setJustUpdated(true);
+
+      if (flashTimer.current) {
+        window.clearTimeout(flashTimer.current);
+      }
+
+      flashTimer.current = window.setTimeout(() => setJustUpdated(false), UPDATED_FLASH_MS);
+    } catch {
+      // Silent: the doorbell or the next focus check will try again.
+    }
+  }, []);
+
+  const pullLatest = useCallback(async () => {
     try {
       const head = await fetch(`/api/share/${shareIdRef.current}/rev`, { cache: "no-store" });
 
@@ -73,38 +102,14 @@ export function SharedSongLive({ initialPayload }: { initialPayload: SharedSongP
         return;
       }
 
-      const full = await fetch(`/api/share/${shareIdRef.current}`, { cache: "no-store" });
-
-      if (!full.ok) {
-        return;
-      }
-
-      const next = (await full.json()) as SharedSongPayload;
-
-      revisionRef.current = next.revision;
-      setPayload(next);
-      setJustUpdated(true);
-
-      if (flashTimer.current) {
-        window.clearTimeout(flashTimer.current);
-      }
-
-      flashTimer.current = window.setTimeout(() => setJustUpdated(false), UPDATED_FLASH_MS);
+      await fetchAndSwap();
     } catch {
-      // A dropped poll is not worth telling a singer about; the next tick retries.
+      // A dropped catch-up is not worth telling a singer about; returning to the
+      // tab again retries.
     }
-  }, []);
+  }, [fetchAndSwap]);
 
   useEffect(() => {
-    let timer: number | undefined;
-
-    const tick = () => {
-      void pullLatest();
-      timer = window.setTimeout(tick, POLL_INTERVAL_MS);
-    };
-
-    // Check on the way back to the tab as well: a singer who locked their phone
-    // mid-song should not wait a full interval to see the fix.
     const onVisible = () => {
       if (document.visibilityState === "visible") {
         void pullLatest();
@@ -112,18 +117,23 @@ export function SharedSongLive({ initialPayload }: { initialPayload: SharedSongP
     };
 
     document.addEventListener("visibilitychange", onVisible);
-    timer = window.setTimeout(tick, POLL_INTERVAL_MS);
+
+    // Push: the editor rings this doorbell after every publish, so the page only
+    // talks to the network when the song actually changed.
+    const unsubscribe = subscribeShareHead(shareIdRef.current, (head) => {
+      if (head.revision > revisionRef.current) {
+        void fetchAndSwap();
+      }
+    });
 
     return () => {
-      if (timer) {
-        window.clearTimeout(timer);
-      }
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
       if (flashTimer.current) {
         window.clearTimeout(flashTimer.current);
       }
-      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [pullLatest]);
+  }, [fetchAndSwap, pullLatest]);
 
   const song = payload.song;
   const toggles: RehearsalDisplayToggles = {

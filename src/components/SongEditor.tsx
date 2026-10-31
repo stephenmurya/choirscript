@@ -46,6 +46,7 @@ import {
   setOccurrenceNote,
 } from "@/lib/arrangement";
 import { getSongWithMeta, saveSong as saveCloudSong } from "@/lib/firebase/songs";
+import { publishShareHead } from "@/lib/shareHeads";
 import type { SongMeta } from "@/lib/firebase/types";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import {
@@ -276,6 +277,19 @@ export function SongEditor({ songId }: SongEditorProps) {
       if (!response.ok) {
         const result = (await response.json()) as { error?: string };
         console.error("Share publish failed", result.error ?? response.status);
+        return;
+      }
+
+      const published = (await response.json()) as { revision?: number; updatedAt?: string };
+
+      // Ring the doorbell only after the publish committed: open rehearsal pages
+      // hold a Firestore listener on it and swap the new revision in place.
+      if (typeof published.revision === "number") {
+        void publishShareHead(
+          share.id,
+          published.revision,
+          published.updatedAt ?? new Date().toISOString(),
+        );
       }
     } catch (error) {
       console.error("Share publish failed", error);

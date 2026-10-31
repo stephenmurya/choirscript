@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Copy, ExternalLink, Loader2, Radio, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Song, SongShare } from "@/lib/songTypes";
+import { publishShareHead } from "@/lib/shareHeads";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,6 +108,14 @@ export function ShareDialog({ song, open, onOpenChange, onShareCreated }: ShareD
           editToken: result.editToken,
           publishedAt: new Date().toISOString(),
         });
+
+        // Seed the doorbell so the very first edit after creating the link can be
+        // pushed to anyone who already has the page open.
+        void publishShareHead(
+          result.shareId,
+          result.revision ?? 1,
+          new Date().toISOString(),
+        );
       }
 
       toast.success("Live link created");
@@ -137,6 +146,16 @@ export function ShareDialog({ song, open, onOpenChange, onShareCreated }: ShareD
       if (!response.ok) {
         const result = (await response.json()) as { error?: string };
         throw new Error(result.error || "Could not publish the latest version");
+      }
+
+      const published = (await response.json()) as { revision?: number; updatedAt?: string };
+
+      if (typeof published.revision === "number") {
+        void publishShareHead(
+          existingShare.id,
+          published.revision,
+          published.updatedAt ?? new Date().toISOString(),
+        );
       }
 
       toast.success("Latest version published");

@@ -22,16 +22,26 @@ A share is a **moving head**:
 - `shares/<id>.json` is written with `allowOverwrite: true` and republished by
   the editor whenever the song changes (2 s trailing debounce, so a burst of
   typing publishes once).
-- `shares/<id>.rev.json` is a tiny head (`{ revision, updatedAt }`) that open
-  rehearsal pages poll every 3 s — a few dozen bytes instead of the whole song.
+- `shares/<id>.rev.json` is a tiny head (`{ revision, updatedAt }`) that stays the
+  authoritative counter.
+- **Delivery is push, not polling.** After a publish commits, the editor writes a
+  `shareHeads/<id>` Firestore document (`{ shareId, revision, updatedAt }`). Open
+  rehearsal pages hold a single `onSnapshot` listener on it, so Firestore pushes
+  the write to every viewer and the page is silent while the song is idle. The
+  document is public-read (it holds a counter, never song content) and writable
+  only by signed-in editors; the rules live in `firestore.rules`.
+- The doorbell is advisory: the Blob payload is authoritative, so a stale or
+  bogus head costs one wasted fetch and nothing more. A tab that was asleep or
+  offline when the write landed catches up with one `/rev` check when it becomes
+  visible again.
 - `shares/<id>.key.json` holds the share's `editToken`. Publishing requires the
   token; the token is stored on the owner's song document (Firestore), never in
   the public payload.
 - Readers fetch with `useCache: false` and the routes answer `no-store`; a cached
   copy would serve the previous revision for the length of the CDN TTL.
 - `/s/<id>` is a server component that renders `SharedSongLive`, a client
-  component holding the payload. When the polled revision moves it fetches the
-  payload and swaps it in place — no reload, no lost scroll position.
+  component holding the payload. When the doorbell fires with a newer revision it
+  fetches the payload and swaps it in place — no reload, no lost scroll position.
 
 `revision` is a monotonically increasing integer. Payloads written before this
 ADR have none and read as revision 1.
