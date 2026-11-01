@@ -252,8 +252,10 @@ These are not phase-specific; they are things no artifact in the repository prov
    but untracked, so a fresh clone has no environment template.
 2. `.env.example` omits the Blob variables that `src/lib/share-store.ts` needs, so local share
    testing cannot be configured from the template alone.
-3. 11 components are unreferenced (list in
-   [../architecture/overview.md](../architecture/overview.md#dead-code)).
+3. 12 components are unreferenced (list in
+   [../architecture/core-editor.md](../architecture/core-editor.md#where-the-ux-actually-hurts-verified-observations)
+   and [README.md](../README.md#known-gaps-at-a-glance)). The live editing chain is
+   `SongEditor → DocumentScriptEditor → LyricLineBlock → VoicePartLanes → NotationInput`.
 4. The editor and rehearsal routes are outside `AuthGate`; signed-out deep links render a
    permanent loading state ([routing-and-state.md](../architecture/routing-and-state.md#known-gaps)).
 5. No unsaved-changes guard exists; a navigation within the 700 ms autosave window loses the edit.
@@ -265,7 +267,34 @@ These are not phase-specific; they are things no artifact in the repository prov
    [data-model.md](../architecture/data-model.md#drift-from-the-phase-3a-document) and
    [rendering-and-print.md](../architecture/rendering-and-print.md#drift-from-the-phase-3a-document).
 
+## Documentation foundation pass (2026-11-01)
+
+**No application code changed in this pass.** It is a documentation-only audit and plan, produced
+against commit `b6eb796`. Every "DONE" claim was checked against the code, not against earlier
+summaries; three statements that had been repeated in planning turned out to be false and are now
+recorded as such:
+
+- Multiple arrangements do **not** exist in the UI (the model only).
+- Sections cannot be reordered.
+- `SyllableGrid` is dead code — SATB entry runs through `VoicePartLanes` → `NotationInput`.
+
+Created: `product/` (vision, features, user-roles, tiers), `architecture/` (current-state,
+domain-model, core-editor, tonic-solfa-engine, auth-and-ownership, publication-and-seo,
+contributions-and-revisions, infrastructure-target, migration-plan, asset-rights-and-storage),
+`future/` (ai-processing, band-management, public-library, marketplace), `planning/`
+(pre-migration-improvements, implementation-roadmap, dependency-map, risks-and-open-questions,
+decision-log). Updated: `README.md` (index, source of truth, status vocabulary, gaps),
+`future/README.md` (real statuses), this ledger.
+
+Verified while writing: 44 markdown files under `docs/`, **0 broken internal links**; working tree
+contained only documentation changes; `tsc`, `eslint` and `next build` untouched because no source
+file was modified.
+
+Unverified by nature: everything marked NOT STARTED. The TIER/PHASE estimates in
+`planning/implementation-roadmap.md` are judgement, not measurements.
+
 ## Related
 
 - Planned work: [../future/README.md](../future/README.md)
 - Decision records: [../adr/](../adr/)
+- Feature status: [../product/features.md](../product/features.md)

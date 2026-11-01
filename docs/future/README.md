@@ -1,20 +1,40 @@
-# Planned work
+# Planned and future work
 
-Everything on this page is **PLANNED or IN PROGRESS**. Nothing here is shipped in a commit or
-available in production. Where uncommitted code exists, it is described explicitly as
-working-tree state, not as delivered functionality.
-Each item states what exists today (verified), what is intended, where the storage or API seam
-would sit, and which questions must be answered before implementation. If an item ever ships,
-it moves out of this file and into the architecture docs and the ledger.
+**This page is a history of proposals, not the status of the product.** For "does this exist?",
+read [../product/features.md](../product/features.md), which is verified against the code. Several
+items below have shipped since they were written and are marked accordingly; the rest are
+superseded by the module documents in this directory.
 
-Status vocabulary: `PLANNED` (design intention, no code), `IN PROGRESS` (code exists only as
-uncommitted working-tree changes), `NOT STARTED` (no code at all).
+Status vocabulary here: `NOT STARTED`, `SHIPPED`, `SHIPPED (PARTIAL)`, `SUPERSEDED`.
+
+## Current module documents (authoritative)
+
+| Module | Document | Status |
+| --- | --- | --- |
+| AI import, stem/SATB separation, pitch tracking | [ai-processing.md](ai-processing.md) | NOT STARTED, deferred |
+| Band, choir and ministry management | [band-management.md](band-management.md) | NOT STARTED, deferred |
+| Public library and discovery | [public-library.md](public-library.md) | NOT STARTED |
+| Creator marketplace | [marketplace.md](marketplace.md) | DEFERRED |
+| Infrastructure migration | [../architecture/migration-plan.md](../architecture/migration-plan.md) | NOT STARTED |
+
+## Items below, with their real status
+
+| § | Item | Status now |
+| --- | --- | --- |
+| 1 | Per-line and per-section part assignment | **NOT STARTED** — the occurrence-level `performer` / `voicing` / `melodyPart` fields partly answer the need at section granularity, not line granularity |
+| 2 | Part transfer between voice parts | **SHIPPED** — `src/lib/partTransfer.ts`, `PartTransferMenu.tsx` |
+| 3 | Global syllable dictionary | **SHIPPED (PARTIAL)** — `src/lib/syllableDictionary.ts`, device-local only (features.md D-06) |
+| 4 | Backend migration off Vercel and Firebase | **NOT STARTED** — see `../architecture/infrastructure-target.md` and `migration-plan.md` |
+| 5 | Smaller items | mixed; see the table in features.md |
+
+Each section below states what existed when it was written, what is intended, where the storage or
+API seam would sit, and which questions must be answered before implementation.
 
 ---
 
 ## 1. Per-line and per-section part assignment
 
-Status: PLANNED. No code.
+Status: NOT STARTED. Partly answered at section granularity by `ArrangementOccurrence.performer` / `voicing` / `melodyPart`.
 
 ### Today
 
@@ -70,7 +90,7 @@ song (`src/lib/songTypes.ts:203`).
 
 ## 2. Part transfer: move or swap a voice's notes between parts
 
-Status: IN PROGRESS (uncommitted, not shipped, not verified end-to-end). An uncommitted
+Status: SHIPPED in commit `3466e1e` (`src/lib/partTransfer.ts`). The description below is the original proposal; the shipped behaviour matches it. Originally:
 `src/lib/partTransfer.ts` and `src/components/PartTransferMenu.tsx` exist in the working tree as
 of 2026-10-31. No commit contains them, the menu is not imported by any rendered component, and
 no test exercises the helpers.
@@ -132,7 +152,7 @@ missing before it can ship:
 
 ## 3. Global syllable dictionary
 
-Status: IN PROGRESS (uncommitted working tree, not shipped). The dictionary module, its writes,
+Status: SHIPPED (PARTIAL) — device-local only. The dictionary module, its writes,
 and its UI controls exist only as uncommitted changes on 2026-10-31.
 
 ### Today
@@ -190,7 +210,7 @@ implementation:
 
 ## 4. Backend migration off Vercel and Firebase
 
-Status: PLANNED. No abstraction layer exists.
+Status: NOT STARTED. Design now lives in `../architecture/migration-plan.md` and `infrastructure-target.md`. No abstraction layer exists yet.
 
 ### Today
 

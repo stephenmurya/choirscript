@@ -4,16 +4,31 @@ This directory is the written record of the ChoirScript codebase: what it does, 
 structured, which decisions produced that structure, what has actually shipped, and what is
 only planned.
 
-Verification baseline: commit `783c338` (2026-10-31). Everything shipped on 2026-10-31 is
-committed and deployed; there is no uncommitted working set. Claims cite `path:line` where the
-reference is useful, but behaviour and file paths are the durable part — line numbers rot. The
-code wins over any prose here, including the historical Phase 3A document.
+Verification baseline: commit `b6eb796` (2026-11-01). Everything described as done is committed
+and deployed; there is no uncommitted working set. Claims cite `path:line` where the reference is
+useful, but behaviour and file paths are the durable part — line numbers rot. The code wins over
+any prose here, including the historical Phase 3A document.
 
-Two conventions matter when reading these docs:
+**Source of truth.** Three documents, each answering a different question:
 
-- "Implemented" means the code path exists and is reached by the running app.
-- "Planned" means a design intention only. Planned work lives in `future/README.md` and is never
-  described as delivered.
+| Question | Document |
+| --- | --- |
+| Does this feature exist, and how complete is it? | [product/features.md](product/features.md) — the status table |
+| What happened, in what order, with what evidence? | [ledger/implementation-ledger.md](ledger/implementation-ledger.md) |
+| Why is it built this way, and what comes next? | [planning/decision-log.md](planning/decision-log.md) and `architecture/` |
+
+Status vocabulary, used identically in every document:
+
+| Status | Meaning |
+| --- | --- |
+| **DONE** | Implemented, reachable, observed working |
+| **INCOMPLETE** | Exists but a user-facing part is missing |
+| **NOT STARTED** | No implementation; may be designed here |
+| **DEFERRED** | Explicitly postponed by the owner |
+| **SUPERSEDED** | Replaced by a newer decision |
+
+"Planned" is never used as a status — it hides the difference between "we agreed" and "we wrote
+code". Proposals are marked Proposed in the decision log until the owner accepts them.
 
 ## Documentation contract
 
@@ -35,6 +50,15 @@ that it was ("0 requests over 20 s idle at 390 px" beats "verified"); record the
 wrong doc is worse than none. `docs/adr/` is the decision log, the ledger is the work log; do not
 duplicate a decision across both.
 
+## Product
+
+| Document | Contents |
+| --- | --- |
+| [product/vision.md](product/vision.md) | What the product is, where it is going, and the principles that constrain the work |
+| [product/features.md](product/features.md) | **The status inventory** — every feature with DONE / INCOMPLETE / NOT STARTED, evidence, and the round-up list of incomplete work |
+| [product/user-roles.md](product/user-roles.md) | Owner / editor / contributor / viewer / anonymous, the target permission matrix, and what exists today |
+| [product/tiers-and-monetization.md](product/tiers-and-monetization.md) | Free / Pro / Organization, metering primitives, and why nothing is priced yet |
+
 ## Architecture
 
 | Document | Contents |
@@ -43,6 +67,16 @@ duplicate a decision across both.
 | [architecture/data-model.md](architecture/data-model.md) | `Song` aggregate, Source/Arrangement model, timing, annotations, IDs, normalization pipeline, invariants |
 | [architecture/routing-and-state.md](architecture/routing-and-state.md) | Every route, layout composition, auth gating matrix, which component owns which state, load/save lifecycles |
 | [architecture/rendering-and-print.md](architecture/rendering-and-print.md) | Editor grid, simple vs advanced rehearsal renderers, arrangement resolution, scroll-spy, print pipeline |
+| [architecture/current-state.md](architecture/current-state.md) | Verified map: stack, routes, request/data flow, editor composition, structural debt |
+| [architecture/domain-model.md](architecture/domain-model.md) | Entities, invariants, deliberate gaps, and the schema additions the compiler and publication need |
+| [architecture/core-editor.md](architecture/core-editor.md) | The editing pipeline, live component chain, dead surfaces, and the work that belongs here |
+| [architecture/tonic-solfa-engine.md](architecture/tonic-solfa-engine.md) | The `SolfaScore` compiler design, rendering conventions, rehearsal modes, test fixtures |
+| [architecture/auth-and-ownership.md](architecture/auth-and-ownership.md) | Firebase Auth today, Better Auth target, identity migration, ownership model |
+| [architecture/publication-and-seo.md](architecture/publication-and-seo.md) | Public page IA, visibility tiers, structured data, crawl policy, acquisition loop |
+| [architecture/contributions-and-revisions.md](architecture/contributions-and-revisions.md) | Revisions, proposals, musical diffs, conflict handling |
+| [architecture/infrastructure-target.md](architecture/infrastructure-target.md) | Workers/Neon/Drizzle/Better Auth/R2 target and the constraints it imposes |
+| [architecture/migration-plan.md](architecture/migration-plan.md) | Staged migration, validation gates, rollback |
+| [architecture/asset-rights-and-storage.md](architecture/asset-rights-and-storage.md) | Asset classes, rights declarations, R2 layout, takedowns |
 
 ## Auth and backend
 
@@ -72,7 +106,21 @@ duplicate a decision across both.
 | Document | Contents |
 | --- | --- |
 | [ledger/implementation-ledger.md](ledger/implementation-ledger.md) | Every commit on `master` with SHA and date, what it delivered, what remains unverified |
-| [future/README.md](future/README.md) | Planned work: per-line/per-section parts, part transfer, global syllable dictionary, backend migration |
+| [planning/pre-migration-improvements.md](planning/pre-migration-improvements.md) | The ranked menu of work worth doing before the infrastructure move |
+| [planning/implementation-roadmap.md](planning/implementation-roadmap.md) | Phases P0–P8 with acceptance criteria, complexity and backend dependency |
+| [planning/dependency-map.md](planning/dependency-map.md) | What blocks what, and the dependencies that only look circular |
+| [planning/risks-and-open-questions.md](planning/risks-and-open-questions.md) | Ranked risks, open questions with recommendations, and planning-vs-code discrepancies |
+| [planning/decision-log.md](planning/decision-log.md) | Every decision with status, including rejected alternatives |
+| [future/README.md](future/README.md) | Index of future modules |
+
+## Future modules
+
+| Document | Module |
+| --- | --- |
+| [future/ai-processing.md](future/ai-processing.md) | Audio import, stem and SATB separation, pitch tracking, job economics |
+| [future/band-management.md](future/band-management.md) | People, services, repertoire planning, attendance, development, analytics |
+| [future/public-library.md](future/public-library.md) | Canonical songs, browse/search, creator pages, moderation |
+| [future/marketplace.md](future/marketplace.md) | Deferred: listings, licences, entitlements, payouts |
 
 ## Historical input
 
@@ -82,16 +130,24 @@ duplicate a decision across both.
 
 ## Known gaps at a glance
 
-These are recorded in detail in the ledger and the relevant architecture documents:
+Verified on 2026-11-01; details in [product/features.md](product/features.md) and the ledger.
 
-- No automated test suite and no CI. `scripts/phase3-validation.ts` and
-  `scripts/phase3d-validation.ts` are manual `node:assert` scripts with no runner, no npm
-  script, and no CI invocation.
-- `.gitignore` ignores `.env*`, which also excludes `.env.example`; the template exists on
-  disk but is not tracked by git.
-- 11 components in `src/components/` are never imported (listed in
-  [architecture/overview.md](architecture/overview.md#dead-code)).
-- `README.md` at the repository root is untouched create-next-app boilerplate.
-- The editor and rehearsal routes are outside the auth gate; an unauthenticated deep link
-  renders a permanent loading state rather than redirecting to `/login`
-  ([architecture/routing-and-state.md](architecture/routing-and-state.md#known-gaps)).
+- **No automated tests and no CI.** No test runner, no `test` script in `package.json`, zero test
+  files. `scripts/phase3-validation.ts` and `scripts/phase3d-validation.ts` are manual
+  `node:assert` scripts with no runner and no CI invocation.
+- **No Firestore index configuration** in the repo (`firebase.json` exists; no
+  `firestore.indexes.json`). Queries are shaped to avoid composite indexes; a new query shape can
+  fail at runtime with index-required.
+- **12 dead components.** `SyllableGrid`, `SyllableCell`, `AnnotationInspector`,
+  `SelectedSyllableInspector`, `SelectableSyllableText`, `SectionList`, `MetadataPanel`,
+  `RawMarkupPreview`, `SongDashboard`, `TechniquePalette`, `VoicePartCueInput` and
+  `FloatingTechniqueToolbar` are never imported. The live editing chain is
+  `SongEditor → DocumentScriptEditor → LyricLineBlock → VoicePartLanes → NotationInput`.
+- **Editor and rehearsal routes sit outside the auth route group.** `/songs/[id]` and
+  `/songs/[id]/rehearsal` have no `(workspace)` layout, so an unauthenticated deep link renders a
+  loading state instead of redirecting to `/login`.
+- **`.gitignore` ignores `.env*`,** which also excludes `.env.example` — the template exists on
+  disk but is not tracked.
+- **Root `README.md` is untouched create-next-app boilerplate.**
+- **Share links are indexable by default** — no `robots` metadata on `/s/{shareId}`; being
+  "unlisted" is currently obscurity, not policy.
