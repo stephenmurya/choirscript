@@ -125,9 +125,13 @@ export function isPairSwap(map: Record<VocalPart, VocalPart>): boolean {
 }
 
 /**
- * How the parts move, written the way a singer reads it: "S → T → A" for a
- * rotation over the parts in use (the last part hands back to the first), or
- * "S→T · T→S" for a custom mapping.
+ * How the parts move, written the way a singer reads it: a closed chain that
+ * starts at the soprano and names, for each part, whose line it now sings.
+ *
+ * Rehearsal renders `map[target] = source`, i.e. the Tenor lane shows the
+ * soprano line. The chain must describe exactly that, so it is the walk
+ * `S -> map[S] -> map[map[S]] ...` closed back onto the soprano:
+ * SATB clockwise reads "S → A → B → T → S".
  */
 export function describePartSwap(
   swap: PartSwap | undefined,
@@ -138,25 +142,30 @@ export function describePartSwap(
     return "";
   }
 
-  if (!swap?.map && swap?.direction) {
-    const ring = ringFor(parts);
-    const order = swap.direction === "clockwise" ? ring : [...ring].reverse();
-    // A chain always reads from the soprano when there is one, so the chip
-    // starts where a singer expects: S → T → A, not A → T → S.
-    const sopranoAt = order.indexOf("soprano");
-    const display = sopranoAt > 0 ? [...order.slice(sopranoAt), ...order.slice(0, sopranoAt)] : order;
-    return display.map((part) => PART_LETTER[part]).join(" → ");
-  }
+  const ring = ringFor(parts);
+  const values = ring.map((part) => map[part] ?? part);
+  const isPermutation = new Set(values).size === ring.length;
 
-  const moves: string[] = [];
-  for (const target of ringFor(parts)) {
-    const source = map[target] ?? target;
-    if (source !== target) {
-      moves.push(`${PART_LETTER[source]}→${PART_LETTER[target]}`);
+  if (isPermutation) {
+    const start = ring.includes("soprano") ? "soprano" : ring[0];
+    const chain: VocalPart[] = [start];
+    let current = map[start] ?? start;
+
+    while (current !== start && chain.length <= ring.length) {
+      chain.push(current);
+      current = map[current] ?? current;
     }
+
+    chain.push(start);
+    return chain.map((part) => PART_LETTER[part]).join(" → ");
   }
 
-  return moves.join(" · ");
+  // Not a permutation (custom maps can point two parts at one line): report the
+  // movements as pairs rather than pretend there is a single cycle.
+  return ring
+    .filter((part) => (map[part] ?? part) !== part)
+    .map((part) => `${PART_LETTER[part]}→${PART_LETTER[map[part] as VocalPart]}`)
+    .join(" · ");
 }
 
 /** Validate a stored swap; returns undefined when it would not change anything. */

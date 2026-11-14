@@ -366,6 +366,13 @@ one, so anticlockwise reads `S → A → T`. Verified locally for SAT and SATB a
 links `1QNKbA8_za` (SAT) and `BCHO3YzVeR` (SATB): clockwise SAT produced S=Mi A=Do T=So with bass
 untouched; clockwise SATB produced S=Mi A=Re T=So B=Do; anticlockwise produced chains starting at S.
 
+**Label correction (`2db2ebb` → this commit).** The chip had been describing the movement of the
+*notes* ("S → T → A" = soprano's line moves to the tenor), while rehearsal draws each singer's new
+line (target → source). The two read as opposites. `describePartSwap` now walks the resolved map
+from the soprano and closes the loop, so the chip and the page agree: SATB clockwise is
+`S → A → B → T → S`, SAT is `S → A → T → S`, and the final arrow names where the last part's line
+came from. Custom maps that are not permutations fall back to pairs.
+
 **Not verified.** The authenticated editor controls were not driven by browser automation; the
 editor's props and pure swap functions were typechecked, and the production renderer was verified
 from a real share payload containing all four swap forms.

@@ -38,11 +38,13 @@ type PartSwap = {
 - **The lane label stays the singer's own part.** After a clockwise swap the Tenor lane shows the
   notes the sopranos used to read — the row is still "Tenor", because that is who reads it.
 - **The swap is visible, and spelled out.** The section header carries a chip that names the
-  movement — `Swap S → T → A`, `Swap S → T → B → A`, or `Swap S→T · T→S` for a custom map — so a
-  singer knows where their line went without opening the editor. A rotation chain always starts at
-  the soprano when the song has one, so anticlockwise reads `S → A → T`, not `A → T → S`. The
-  editor row carries the same chip, and the editor's mode buttons show the chain they will produce
-  for this song.
+  movement as a **closed chain that starts and ends at the soprano**: `S → A → B → T → S` means the
+  soprano sings the alto line, the alto sings the bass line, the bass sings the tenor line and the
+  tenor sings the soprano line. The chain describes exactly what the renderer draws (target →
+  source), and it is closed so the last movement is explicit rather than implied. A SAT song reads
+  `S → A → T → S`. Non-permutation custom maps have no single cycle and are shown as pairs
+  (`T→S · A→B`). The editor row carries the same chip, and the editor's mode buttons preview the
+  chain they will produce for this song.
 - **Grouping includes the swap.** Two adjacent placements with different swaps are different
   performances and must not collapse into one `×N` block (ADR-0012); the group signature includes a
   stable serialisation of the resolved map.
