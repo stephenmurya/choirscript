@@ -83,7 +83,7 @@ export function OnboardingDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-primary">
+          <p className="text-xs font-medium uppercase tracking-[0.14em] text-performer">
             Tip {stepIndex + 1} of {steps.length}
           </p>
           <DialogTitle className="text-2xl">{step.title}</DialogTitle>

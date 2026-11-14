@@ -1,7 +1,7 @@
 import { Fragment } from "react";
-import { Music2, UserRound } from "lucide-react";
+import { Music2, Repeat, UserRound } from "lucide-react";
 import { PART_LABELS } from "@/lib/annotationUtils";
-import { resolveArrangement } from "@/lib/arrangement";
+import { groupResolvedSections, resolveArrangement } from "@/lib/arrangement";
 import { ArrangementMobileBar, ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, TimingEvent, TimingScope } from "@/lib/songTypes";
 import {
@@ -308,7 +308,7 @@ export function AdvancedTimingRehearsalView({
       </div>
 
       <div className="flex flex-col gap-8">
-        {resolveArrangement(song).map(({ occurrence, repeatIndex, renderIdentity, section }) => {
+        {groupResolvedSections(resolveArrangement(song)).map(({ occurrence, renderIdentity, section, count }) => {
           const melodyPart =
             occurrence.voicing === "melody" ? occurrence.melodyPart ?? "soprano" : null;
 
@@ -321,10 +321,20 @@ export function AdvancedTimingRehearsalView({
           >
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold text-foreground">{section.name}</h2>
+              {count > 1 ? (
+                <span
+                  data-rehearsal-repeat={count}
+                  title={`Sung ${count} times in this arrangement`}
+                  className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground"
+                >
+                  <Repeat className="size-3" />
+                  ×{count}
+                </span>
+              ) : null}
               {occurrence.performer ? (
                 <span
                   data-rehearsal-performer="true"
-                  className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-primary"
+                  className="inline-flex items-center gap-1 rounded-full border border-performer/40 bg-performer/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-performer"
                 >
                   <UserRound className="size-3" />
                   {occurrence.performer}
@@ -345,7 +355,7 @@ export function AdvancedTimingRehearsalView({
                 key={`${renderIdentity}:${line.id}`}
                 song={song}
                 sectionId={section.id}
-                occurrenceId={`${occurrence.id}:${repeatIndex}`}
+                occurrenceId={renderIdentity}
                 line={line}
                 toggles={toggles}
                 melodyPart={melodyPart}

@@ -100,6 +100,7 @@ duplicate a decision across both.
 | [adr/ADR-0009-browser-print.md](adr/ADR-0009-browser-print.md) | Print via `window.print()` and CSS, not server-side PDF |
 | [adr/ADR-0010-deterministic-workspace-ids.md](adr/ADR-0010-deterministic-workspace-ids.md) | Default workspace id is `default-{uid}` so bootstrap is idempotent |
 | [adr/ADR-0011-live-share-links.md](adr/ADR-0011-live-share-links.md) | Share links are a moving head, pushed to viewers by a Firestore doorbell (supersedes ADR-0006) |
+| [adr/ADR-0012-collapse-repeated-performances.md](adr/ADR-0012-collapse-repeated-performances.md) | Identical consecutive performances render once with `×N`; a differing performer/voicing stays separate |
 
 ## Delivery and plans
 

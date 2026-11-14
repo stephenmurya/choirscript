@@ -75,6 +75,8 @@ Status vocabulary: **Accepted** (in force), **Proposed** (recommended, awaiting 
 | D-26 | The marketplace is deferred; only its primitives are built (ownership, attribution, revisions, publication, permissions, assets, licensing) | Accepted | No supply, no demand, and it drags in payments and disputes |
 | D-27 | Band/organisation management is deferred until editor and publishing are stable | Accepted | The editor is the product people use weekly |
 | D-28 | Public publishing requires a rights declaration | Proposed | The cheapest credible defence against takedown exposure |
+| D-29 | Identical consecutive performances render once with a `×N` badge (ADR-0012) | Accepted (shipped) | Four identical choruses were four walls of the same lyrics; only a differing performer or voicing earns its own block |
+| D-30 | "Who sings this" uses a dedicated `--performer` token, never `--primary` | Accepted (shipped) | `--primary` is a button-background colour (L\*=42) and measured 2.25:1 as text on the dark canvas; the new token measures 10.4:1 |
 
 ## Rejected alternatives (kept so they are not re-proposed)
 

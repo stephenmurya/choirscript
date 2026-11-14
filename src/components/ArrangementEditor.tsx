@@ -198,13 +198,13 @@ function SortableRow({
             <button
               type="button"
               onClick={() => onEditSource(section.id)}
-              className="min-w-0 truncate text-left text-xs font-semibold leading-5 text-foreground transition hover:text-primary"
+              className="min-w-0 truncate text-left text-xs font-semibold leading-5 text-foreground transition hover:text-performer"
               title={`Edit ${section.name}`}
             >
               {section.name}
             </button>
             {repeatCount > 1 ? (
-              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              <span className="shrink-0 rounded-full bg-performer/15 px-1.5 py-0.5 text-[10px] font-semibold text-performer">
                 ×{repeatCount}
               </span>
             ) : null}
@@ -300,7 +300,7 @@ function SortableRow({
               className="mt-0.5 flex max-w-full items-center gap-1 text-left text-[11px] text-muted-foreground transition hover:text-foreground"
             >
               {occurrence.performer ? (
-                <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary">
+                <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-performer/15 px-1.5 py-0.5 font-medium text-performer">
                   <UserRound className="size-2.5 shrink-0" />
                   <span className="truncate">{occurrence.performer}</span>
                 </span>
@@ -433,7 +433,7 @@ function ArrangementPanelContent(props: ArrangementEditorProps) {
 
       <div className="relative z-20 shrink-0 bg-background pb-2">
         <div className="flex items-center gap-2">
-          <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-8 place-items-center rounded-lg bg-performer/15 text-performer">
             <ListMusic className="size-4" />
           </span>
           <div className="min-w-0">

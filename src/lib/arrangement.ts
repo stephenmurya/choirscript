@@ -89,6 +89,65 @@ export function resolveArrangement(song: Song): ResolvedSection[] {
   return resolved.length > 0 ? resolved : fallbackToSourceOrder();
 }
 
+/**
+ * A run of consecutive performances that look identical in rehearsal: same
+ * source section, same performer, same voicing, same occurrence note. Four
+ * repeats of one chorus collapse into a single block labelled "×4" instead of
+ * four walls of the same lyrics.
+ *
+ * Occurrences only stay separate when a performance actually differs — e.g.
+ * "Chorus · Backups · melody (Alto)" followed by "Chorus · Backups · SATB".
+ * Adjacent occurrences that happen to be identical collapse too, because to a
+ * singer they are the same page.
+ */
+export type ResolvedGroup = {
+  key: string;
+  section: SourceSection;
+  occurrence: ArrangementOccurrence;
+  /** Number of performances represented (repeats × occurrences). */
+  count: number;
+  occurrences: ResolvedSection[];
+  /** Anchor identity of the first performance; stable for scroll-spy links. */
+  renderIdentity: string;
+};
+
+function performanceSignature(entry: ResolvedSection): string {
+  const { occurrence, section } = entry;
+  return [
+    section.id,
+    occurrence.performer ?? "",
+    occurrence.voicing ?? "harmony",
+    occurrence.melodyPart ?? "",
+    occurrence.note ?? "",
+  ].join("\u0000");
+}
+
+export function groupResolvedSections(resolved: ResolvedSection[]): ResolvedGroup[] {
+  const groups: ResolvedGroup[] = [];
+
+  for (const entry of resolved) {
+    const key = performanceSignature(entry);
+    const previous = groups[groups.length - 1];
+
+    if (previous && previous.key === key) {
+      previous.count += 1;
+      previous.occurrences.push(entry);
+      continue;
+    }
+
+    groups.push({
+      key,
+      section: entry.section,
+      occurrence: entry.occurrence,
+      count: 1,
+      occurrences: [entry],
+      renderIdentity: entry.renderIdentity,
+    });
+  }
+
+  return groups;
+}
+
 /** Occurrence count for a given Source section in the active arrangement. */
 export function countOccurrencesForSection(song: Song, sourceSectionId: string): number {
   const arrangement = getActiveArrangement(song);

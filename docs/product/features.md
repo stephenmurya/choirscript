@@ -118,6 +118,8 @@ at the end — that section is the one to work from when closing gaps.
 | G-10 | "My Part" large-print focus mode | **NOT STARTED** | Only per-part toggles exist |
 | G-11 | Lyrics-only rehearsal mode | **NOT STARTED** | — |
 | G-12 | Saved view presets per user | **NOT STARTED** | Toggles reset on reload |
+| G-16 | Identical consecutive performances collapse to one block with `×N` | **DONE** | ADR-0012; `groupResolvedSections` in `src/lib/arrangement.ts`; used by both rehearsal views, the arrangement rail and therefore print |
+| G-17 | "Who sings this" accent is legible on the dark canvas | **DONE** | `--performer` token in `globals.css` (contrast 2.25:1 → 10.4:1); used by both rehearsal chips, the arrangement panel, the rail and the onboarding tip |
 | G-13 | Print sheet | **INCOMPLETE** | `@media print` rules and `PrintToolbar.tsx` exist; output is the screen layout, not a sheet with systems, pagination and part alignment |
 | G-14 | PDF export | **NOT STARTED** | Print-to-PDF via the browser only (ADR-0009) |
 | G-15 | Practice audio, stems, mute/solo | **NOT STARTED** | Future module: `../future/ai-processing.md` |

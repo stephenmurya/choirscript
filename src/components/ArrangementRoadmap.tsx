@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ListMusic } from "lucide-react";
-import { resolveArrangement } from "@/lib/arrangement";
+import { groupResolvedSections, resolveArrangement } from "@/lib/arrangement";
 import type { Song } from "@/lib/songTypes";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 function useArrangementRows(song: Song) {
-  return useMemo(() => resolveArrangement(song), [song]);
+  return useMemo(() => groupResolvedSections(resolveArrangement(song)), [song]);
 }
 
 function ArrangementList({
@@ -16,7 +16,7 @@ function ArrangementList({
   activeId,
   onJump,
 }: {
-  rows: ReturnType<typeof resolveArrangement>;
+  rows: ReturnType<typeof groupResolvedSections>;
   activeId: string;
   onJump: (id: string) => void;
 }) {
@@ -26,9 +26,9 @@ function ArrangementList({
 
   return (
     <ol className="space-y-1" aria-label="Rehearsal arrangement">
-      {rows.map(({ occurrence, section, repeatIndex, renderIdentity }, index) => {
+      {rows.map(({ occurrence, section, renderIdentity, count }, index) => {
         const id = `rehearsal-${renderIdentity}`;
-        const label = repeatIndex > 0 ? `${section.name} · repeat ${repeatIndex + 1}` : section.name;
+        const label = count > 1 ? `${section.name} · ×${count}` : section.name;
         const performer = occurrence.performer ?? "";
         const melody = occurrence.voicing === "melody";
         const active = activeId === id;
@@ -54,7 +54,7 @@ function ArrangementList({
                   ) : null}
                 </span>
                 {performer ? (
-                  <span className="truncate text-[10px] uppercase tracking-[0.08em] text-primary/80">
+                  <span className="truncate text-[10px] uppercase tracking-[0.08em] text-performer">
                     {performer}
                   </span>
                 ) : null}
@@ -71,7 +71,7 @@ function ArrangementList({
  * Scroll-spy: watch every rendered section and keep the list in step with what
  * the singer is looking at.
  */
-function useActiveSection(rows: ReturnType<typeof resolveArrangement>) {
+function useActiveSection(rows: Array<{ renderIdentity: string }>) {
   const [activeId, setActiveId] = useState(rows[0] ? `rehearsal-${rows[0].renderIdentity}` : "");
 
   useEffect(() => {
