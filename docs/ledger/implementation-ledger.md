@@ -55,6 +55,8 @@ last commit `a79c7b1` 2026-10-31. No CI configuration (`.github` absent), no tes
 | 2026-10-31 | `8942c88` | fix(rehearsal): fit more syllables per line on phones | 2 | Note box `h-9 w-10` → `h-7 w-8`, lane chip `h-7` → `h-6`, `--syllable-pad 0.125rem`, `--line-col-gap 0.125rem`, `--line-col gap 0.125rem` |
 | 2026-10-31 | `783c338` | feat(share): push live updates over a Firestore doorbell instead of polling | 8 | `shareHeads` rules + `shareHeads.ts`, `publishShareHead` wiring, `SharedSongLive` subscription, 3 s poll removed, ADR-0011/ledger rewritten |
 | 2026-11-04 | `1ea4845` | fix(rehearsal): collapse identical repeats to ×N; legible performer accent | 11 | `groupResolvedSections` in `arrangement.ts`; both rehearsal views + rail render one block per run of identical performances; `--performer` token replaces `--primary` for "who sings this"; ADR-0012 |
+| 2026-11-06 | `acfb69e` | fix(editor): keep spaces while typing notes/performer; render section director notes in rehearsal | 3 | `setOccurrenceNote`/`setOccurrencePerformer` no longer trim per keystroke; the placement note renders under the section heading in both rehearsal views (gated by the director-notes toggle) |
+| 2026-11-06 | `ea111dd` | feat(arrangement): per-placement part swap | 8 | `src/lib/partSwap.ts`, `ArrangementOccurrence.swap`, ring rotation ↻/↺ or explicit target→source map, editor control + chips, normalisation, group signature includes the swap; ADR-0013 |
 
 Everything below the table is now committed — the earlier "uncommitted working tree" note in this
 document was accurate on the morning of 2026-10-31 and is superseded by the rows above.
@@ -330,7 +332,35 @@ and `helper-selector`, and the selector opens an invisible GUI prompt in a non-i
 Pushing with `-c credential.helper=` and a token URL works. The duplicate helper should be removed
 from the git config.
 
-## Related
+## Director notes and placement part swaps (2026-11-06)
+
+**Director notes.** The arrangement editor's optional placement note was stored correctly, but the
+rehearsal views never rendered it. `ColorfulRehearsalView` and `AdvancedTimingRehearsalView` now
+place it directly below the section heading, before the lyric lines, when the existing "Show
+Director Notes" toggle is on. This is deliberately placement-local: the same source section can
+appear twice with different instructions and each occurrence shows its own note. The editor's
+controlled inputs also preserve the raw string while typing; the previous `trim()` on every
+keystroke deleted the trailing space needed to continue a sentence ("Sing " became "Sing"). Blank
+or whitespace-only values still clear on the next state normalisation.
+
+**Part swaps.** `ArrangementOccurrence.swap` stores an occurrence-local transformation. The editor
+now offers Off, clockwise (`↻`), anticlockwise (`↺`) and Custom. The custom mode has four selects:
+for each target singer (S/A/T/B), choose which source line they read. Rotation uses the requested
+ring S top · T right · B bottom · A left. Rehearsal applies the map to a copy of the section, so
+Source remains canonical; the section header shows `Swap ↻`, `Swap ↺` or `Swap custom`. The
+arrangement row shows the same chip. Swap is included in repeat-group identity, so different swaps
+never collapse into one block.
+
+**Verified.** `tsc`, `eslint`, `next build` clean. Local note harness: trailing spaces preserved,
+internal spaces preserved, whitespace-only clears; placement note rendered under its section heading
+inside `[data-rehearsal-section]`. Local swap harness: plain → `So/Mi/Do/Re`, clockwise →
+`Mi/Re/So/Do`, anticlockwise → `Do/So/Re/Mi`, custom tenor←soprano only; four sections remained
+separate. Production `https://choirscript.vercel.app/s/Kog6obnL2c` after deployment at 390 px showed
+four `×1` sections, with `Swap ↻` visible on the second section and transformed notes.
+
+**Not verified.** The authenticated editor controls were not driven by browser automation; the
+editor's props and pure swap functions were typechecked, and the production renderer was verified
+from a real share payload containing all four swap forms.
 
 - Planned work: [../future/README.md](../future/README.md)
 - Decision records: [../adr/](../adr/)
