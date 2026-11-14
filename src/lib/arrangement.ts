@@ -282,7 +282,11 @@ export function setOccurrenceNote(
   return updateArrangement(song, arrangement.id, (current) => ({
     ...current,
     occurrences: current.occurrences.map((occ) =>
-      occ.id === occurrenceId ? { ...occ, note: note?.trim() ? note.trim() : undefined } : occ,
+      // Keep the raw text while the director is typing: trimming on every
+      // keystroke ate the space between words ("Sing " became "Sing").
+      occ.id === occurrenceId
+        ? { ...occ, note: typeof note === "string" && note.trim() ? note : undefined }
+        : occ,
     ),
   }));
 }
@@ -304,8 +308,9 @@ export function setOccurrencePerformer(
   return updateArrangement(song, arrangement.id, (current) => ({
     ...current,
     occurrences: current.occurrences.map((occ) =>
+      // Raw text while typing — same reason as setOccurrenceNote.
       occ.id === occurrenceId
-        ? { ...occ, performer: performer?.trim() ? performer.trim() : undefined }
+        ? { ...occ, performer: typeof performer === "string" && performer.trim() ? performer : undefined }
         : occ,
     ),
   }));

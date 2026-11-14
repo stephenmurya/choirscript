@@ -332,6 +332,14 @@ export function ColorfulRehearsalView({
                 </span>
               ) : null}
             </div>
+            {toggles.directorNotes && occurrence.note?.trim() ? (
+              <p
+                data-rehearsal-note="true"
+                className="mb-3 max-w-3xl border-l-2 border-performer/50 pl-2 text-[13px] italic leading-5 text-muted-foreground"
+              >
+                {occurrence.note.trim()}
+              </p>
+            ) : null}
             {section.lines.length === 0 ? (
               <p className="text-muted-foreground">No lyric lines in this section.</p>
             ) : null}
