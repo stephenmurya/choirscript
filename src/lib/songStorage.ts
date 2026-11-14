@@ -2,6 +2,7 @@ import { DEFAULT_TECHNIQUES } from "./defaultTechniques";
 import { splitWordIntoSyllables } from "./syllableSplitter";
 import { DEFAULT_TIMING_SETTINGS, ensureTimingForSong, migrateSongTiming } from "./timing";
 import { migrateSongToSourceArrangement, normalizeRepeatCount } from "./arrangement";
+import { normalizePartSwap } from "./partSwap";
 import type {
   Arrangement,
   LineTiming,
@@ -374,6 +375,7 @@ export function normalizeSong(input: Song): Song {
                 : "soprano"
               : undefined,
           repeatCount: normalizeRepeatCount(occ.repeatCount),
+          swap: normalizePartSwap(occ.swap),
         })),
     }));
 

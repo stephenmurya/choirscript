@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { Music2, Repeat, UserRound } from "lucide-react";
+import { ArrowLeftRight, Music2, Repeat, UserRound } from "lucide-react";
 import {
   arrangeTechniqueRangeRows,
   flattenLineSyllables,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/annotationUtils";
 import { getTechniqueById } from "@/lib/defaultTechniques";
 import { groupResolvedSections, resolveArrangement } from "@/lib/arrangement";
+import { applyPartSwapToSection, describePartSwap, resolvePartSwap } from "@/lib/partSwap";
 import { ArrangementMobileBar, ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, SyllableToken } from "@/lib/songTypes";
 import { TechniqueBadge } from "./TechniqueBadge";
@@ -295,6 +296,8 @@ export function ColorfulRehearsalView({
         {groupResolvedSections(resolveArrangement(song)).map(({ occurrence, renderIdentity, section, count }) => {
           const melodyPart =
             occurrence.voicing === "melody" ? occurrence.melodyPart ?? "soprano" : null;
+          const swapMap = resolvePartSwap(occurrence.swap);
+          const display = applyPartSwapToSection(section, swapMap);
 
           return (
           <section
@@ -331,6 +334,16 @@ export function ColorfulRehearsalView({
                   Melody · {melodyPart}
                 </span>
               ) : null}
+              {swapMap ? (
+                <span
+                  data-rehearsal-swap={occurrence.swap?.map ? "custom" : occurrence.swap?.direction}
+                  title="Parts trade lines for this section"
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-200"
+                >
+                  <ArrowLeftRight className="size-3" />
+                  {describePartSwap(occurrence.swap)}
+                </span>
+              ) : null}
             </div>
             {toggles.directorNotes && occurrence.note?.trim() ? (
               <p
@@ -340,10 +353,10 @@ export function ColorfulRehearsalView({
                 {occurrence.note.trim()}
               </p>
             ) : null}
-            {section.lines.length === 0 ? (
+            {display.lines.length === 0 ? (
               <p className="text-muted-foreground">No lyric lines in this section.</p>
             ) : null}
-            {section.lines.map((line) => (
+            {display.lines.map((line) => (
               <RehearsalLine
                 key={`${renderIdentity}:${line.id}`}
                 line={line}

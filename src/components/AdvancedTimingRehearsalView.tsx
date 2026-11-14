@@ -1,7 +1,8 @@
 import { Fragment } from "react";
-import { Music2, Repeat, UserRound } from "lucide-react";
+import { ArrowLeftRight, Music2, Repeat, UserRound } from "lucide-react";
 import { PART_LABELS } from "@/lib/annotationUtils";
 import { groupResolvedSections, resolveArrangement } from "@/lib/arrangement";
+import { applyPartSwapToSection, describePartSwap, resolvePartSwap } from "@/lib/partSwap";
 import { ArrangementMobileBar, ArrangementRoadmap } from "./ArrangementRoadmap";
 import type { PartKey, Song, SongLine, TimingEvent, TimingScope } from "@/lib/songTypes";
 import {
@@ -311,6 +312,8 @@ export function AdvancedTimingRehearsalView({
         {groupResolvedSections(resolveArrangement(song)).map(({ occurrence, renderIdentity, section, count }) => {
           const melodyPart =
             occurrence.voicing === "melody" ? occurrence.melodyPart ?? "soprano" : null;
+          const swapMap = resolvePartSwap(occurrence.swap);
+          const display = applyPartSwapToSection(section, swapMap);
 
           return (
           <section
@@ -347,6 +350,16 @@ export function AdvancedTimingRehearsalView({
                   Melody · {melodyPart}
                 </span>
               ) : null}
+              {swapMap ? (
+                <span
+                  data-rehearsal-swap={occurrence.swap?.map ? "custom" : occurrence.swap?.direction}
+                  title="Parts trade lines for this section"
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-200"
+                >
+                  <ArrowLeftRight className="size-3" />
+                  {describePartSwap(occurrence.swap)}
+                </span>
+              ) : null}
             </div>
             {toggles.directorNotes && occurrence.note?.trim() ? (
               <p
@@ -356,7 +369,7 @@ export function AdvancedTimingRehearsalView({
                 {occurrence.note.trim()}
               </p>
             ) : null}
-            {section.lines.map((line) => (
+            {display.lines.map((line) => (
               <RehearsalTimingLine
                 key={`${renderIdentity}:${line.id}`}
                 song={song}

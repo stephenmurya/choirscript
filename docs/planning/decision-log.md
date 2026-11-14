@@ -77,6 +77,8 @@ Status vocabulary: **Accepted** (in force), **Proposed** (recommended, awaiting 
 | D-28 | Public publishing requires a rights declaration | Proposed | The cheapest credible defence against takedown exposure |
 | D-29 | Identical consecutive performances render once with a `×N` badge (ADR-0012) | Accepted (shipped) | Four identical choruses were four walls of the same lyrics; only a differing performer or voicing earns its own block |
 | D-30 | "Who sings this" uses a dedicated `--performer` token, never `--primary` | Accepted (shipped) | `--primary` is a button-background colour (L\*=42) and measured 2.25:1 as text on the dark canvas; the new token measures 10.4:1 |
+| D-31 | Parts can trade lines per placement, by ring rotation or an explicit map (ADR-0013) | Accepted (shipped) | S top · T right · B bottom · A left; clockwise hands each part the line before it, custom names it explicitly; Source is never mutated, so the same section can appear swapped and unswapped |
+| D-32 | A section's director note renders under its heading in rehearsal | Accepted (shipped) | The note is written on the placement, so it must appear where the placement is performed, not only in the editor |
 
 ## Rejected alternatives (kept so they are not re-proposed)
 

@@ -44,10 +44,12 @@ import {
   setOccurrenceVoicing,
   setOccurrenceRepeatCount,
   setOccurrenceNote,
+  setOccurrenceSwap,
 } from "@/lib/arrangement";
 import { getSongWithMeta, saveSong as saveCloudSong } from "@/lib/firebase/songs";
 import { publishShareHead } from "@/lib/shareHeads";
 import type { SongMeta } from "@/lib/firebase/types";
+import type { PartSwap } from "@/lib/songTypes";
 import { useAuth } from "@/lib/firebase/AuthContext";
 import {
   applyTimingSettingsToSong,
@@ -512,6 +514,10 @@ export function SongEditor({ songId }: SongEditorProps) {
 
   function handleSetOccurrenceNote(occurrenceId: string, note: string) {
     updateSong((current) => setOccurrenceNote(current, occurrenceId, note));
+  }
+
+  function handleSetOccurrenceSwap(occurrenceId: string, swap: PartSwap | undefined) {
+    updateSong((current) => setOccurrenceSwap(current, occurrenceId, swap));
   }
 
   function handleEditSource(sourceSectionId: string) {
@@ -1076,6 +1082,7 @@ export function SongEditor({ songId }: SongEditorProps) {
           onDuplicateOccurrence={handleDuplicateOccurrence}
           onDuplicateSection={handleDuplicateSection}
           onSetOccurrenceRepeatCount={handleSetOccurrenceRepeatCount}
+          onSetOccurrenceSwap={handleSetOccurrenceSwap}
           onEditSource={handleEditSource}
         /> : null}
       <div className="order-2 min-w-0 px-3 pb-10 sm:px-5 xl:px-8">

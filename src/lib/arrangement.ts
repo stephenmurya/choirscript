@@ -1,7 +1,9 @@
 import { createId } from "@/lib/songStorage";
+import { normalizePartSwap, partSwapKey } from "@/lib/partSwap";
 import type {
   Arrangement,
   ArrangementOccurrence,
+  PartSwap,
   Song,
   SourceSection,
   VocalPart,
@@ -119,6 +121,8 @@ function performanceSignature(entry: ResolvedSection): string {
     occurrence.voicing ?? "harmony",
     occurrence.melodyPart ?? "",
     occurrence.note ?? "",
+    // Two placements that swap parts differently are different performances.
+    partSwapKey(occurrence.swap),
   ].join("\u0000");
 }
 
@@ -341,6 +345,27 @@ export function setOccurrenceVoicing(
             melodyPart: voicing === "melody" ? melodyPart : undefined,
           }
         : occ,
+    ),
+  }));
+}
+
+/** Set or clear the part swap for one placement. */
+export function setOccurrenceSwap(
+  song: Song,
+  occurrenceId: string,
+  swap: PartSwap | undefined,
+): Song {
+  const arrangement = getActiveArrangement(song);
+  if (!arrangement) {
+    return song;
+  }
+
+  const next = normalizePartSwap(swap);
+
+  return updateArrangement(song, arrangement.id, (current) => ({
+    ...current,
+    occurrences: current.occurrences.map((occ) =>
+      occ.id === occurrenceId ? { ...occ, swap: next } : occ,
     ),
   }));
 }

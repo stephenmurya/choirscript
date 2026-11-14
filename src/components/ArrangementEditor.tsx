@@ -20,6 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowDown,
+  ArrowLeftRight,
   ArrowUp,
   ChevronDown,
   Copy,
@@ -30,8 +31,15 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import type { ArrangementOccurrence, Song, VocalPart } from "@/lib/songTypes";
+import type { ArrangementOccurrence, PartSwap, PartSwapDirection, Song, VocalPart } from "@/lib/songTypes";
 import { getActiveArrangement, normalizeRepeatCount } from "@/lib/arrangement";
+import {
+  PART_LABEL as SWAP_PART_LABEL,
+  SWAP_RING,
+  describePartSwap,
+  directionMap,
+  resolvePartSwap,
+} from "@/lib/partSwap";
 import { PART_LABELS } from "@/lib/annotationUtils";
 import { getEnabledVoiceParts } from "@/lib/songSelection";
 import { getPerformerSuggestions, rememberPerformerLabel } from "@/lib/performerLabels";
@@ -63,6 +71,7 @@ type ArrangementEditorProps = {
   onDuplicateOccurrence: (occurrenceId: string) => void;
   onDuplicateSection: (sourceSectionId: string) => void;
   onSetOccurrenceRepeatCount: (occurrenceId: string, repeatCount: number) => void;
+  onSetOccurrenceSwap: (occurrenceId: string, swap: PartSwap | undefined) => void;
   onEditSource: (sourceSectionId: string) => void;
   resizeHandle?: ReactNode;
 };
@@ -131,6 +140,111 @@ function SectionPicker({
   );
 }
 
+/**
+ * Part swap for one placement. The choir stands in a ring — soprano at the top,
+ * tenor right, bass bottom, alto left — so a rotation hands each part the line
+ * of the part before it. "Custom" exposes the same mapping as four selects.
+ */
+function SwapEditor({
+  swap,
+  onChange,
+}: {
+  swap: PartSwap | undefined;
+  onChange: (next: PartSwap | undefined) => void;
+}) {
+  const mode: "off" | PartSwapDirection | "custom" = swap?.map
+    ? "custom"
+    : (swap?.direction ?? "off");
+  const resolved =
+    resolvePartSwap(swap) ??
+    ({ soprano: "soprano", alto: "alto", tenor: "tenor", bass: "bass" } as Record<VocalPart, VocalPart>);
+
+  const modes: Array<{ key: "off" | PartSwapDirection | "custom"; label: string; title: string }> = [
+    { key: "off", label: "Off", title: "No swap — every part sings its own line" },
+    { key: "clockwise", label: "↻", title: "Clockwise: S → T → B → A" },
+    { key: "anticlockwise", label: "↺", title: "Anticlockwise: S → A → B → T" },
+    { key: "custom", label: "Custom", title: "Pick which part each part sings" },
+  ];
+
+  function selectMode(next: "off" | PartSwapDirection | "custom") {
+    if (next === "off") {
+      onChange(undefined);
+      return;
+    }
+
+    if (next === "custom") {
+      onChange({ map: { ...directionMap("clockwise") } });
+      return;
+    }
+
+    onChange({ direction: next });
+  }
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-1">
+        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+          <ArrowLeftRight className="size-3" />
+          Swap parts
+        </span>
+        {swap ? (
+          <span className="text-[10px] font-medium text-amber-200">{describePartSwap(swap)}</span>
+        ) : null}
+      </div>
+      <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
+        {modes.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            title={item.title}
+            aria-pressed={mode === item.key}
+            onClick={() => selectMode(item.key)}
+            className={`flex-1 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] transition ${
+              mode === item.key ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {mode === "custom" ? (
+        <div className="grid grid-cols-2 gap-1">
+          {(["soprano", "alto", "tenor", "bass"] as VocalPart[]).map((target) => (
+            <label key={target} className="flex min-w-0 items-center gap-1">
+              <span className="w-7 shrink-0 text-[9px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+                {SWAP_PART_LABEL[target].slice(0, 3)}
+              </span>
+              <select
+                aria-label={`${SWAP_PART_LABEL[target]} sings`}
+                value={resolved[target]}
+                onChange={(event) =>
+                  onChange({
+                    map: { ...(swap?.map ?? {}), [target]: event.target.value as VocalPart },
+                    direction: swap?.direction,
+                  })
+                }
+                className="h-6 w-full min-w-0 rounded border border-border bg-background px-1 text-[10px] text-foreground outline-none focus:border-ring"
+              >
+                {SWAP_RING.map((source) => (
+                  <option key={source} value={source}>
+                    {SWAP_PART_LABEL[source]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      ) : mode === "off" ? (
+        <p className="text-[10px] text-muted-foreground">Every part sings its own line.</p>
+      ) : (
+        <p className="text-[10px] text-muted-foreground">
+          {mode === "clockwise" ? "S → T → B → A" : "S → A → B → T"}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SortableRow({
   song,
   occurrence,
@@ -143,6 +257,7 @@ function SortableRow({
   onSetOccurrenceVoicing,
   onDuplicateOccurrence,
   onSetOccurrenceRepeatCount,
+  onSetOccurrenceSwap,
   onEditSource,
 }: Omit<ArrangementEditorProps, "onAddOccurrence" | "onReorderOccurrence" | "onDuplicateSection"> & {
   occurrence: ArrangementOccurrence;
@@ -292,6 +407,7 @@ function SortableRow({
                   </div>
                 </div>
               ) : null}
+              <SwapEditor swap={occurrence.swap} onChange={(next) => onSetOccurrenceSwap(occurrence.id, next)} />
             </div>
           ) : (
             <button
@@ -310,6 +426,12 @@ function SortableRow({
               {occurrence.voicing === "melody" ? (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-emerald-300">
                   Melody · {(occurrence.melodyPart ?? "soprano").slice(0, 1).toUpperCase()}
+                </span>
+              ) : null}
+              {resolvePartSwap(occurrence.swap) ? (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-amber-200">
+                  <ArrowLeftRight className="size-2.5" />
+                  {describePartSwap(occurrence.swap)}
                 </span>
               ) : null}
             </button>

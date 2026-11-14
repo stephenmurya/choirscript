@@ -172,6 +172,24 @@ export type ArrangementOccurrence = {
   melodyPart?: VocalPart;
   /** Number of consecutive performances represented by this placement. */
   repeatCount?: number;
+  /**
+   * How the parts trade lines for this placement. The choir stands in a ring —
+   * soprano top, tenor right, bass bottom, alto left — so a clockwise rotation
+   * hands each part the line of the part before it. See src/lib/partSwap.ts.
+   */
+  swap?: PartSwap;
+};
+
+/** Clockwise / anticlockwise rotation of the SATB ring. */
+export type PartSwapDirection = "clockwise" | "anticlockwise";
+
+/** Explicit target -> source part mapping (e.g. tenor sings the soprano line). */
+export type PartSwapMap = Partial<Record<VocalPart, VocalPart>>;
+
+export type PartSwap = {
+  direction?: PartSwapDirection;
+  /** Explicit mapping; wins over `direction` when present. */
+  map?: PartSwapMap;
 };
 
 export type Arrangement = {
