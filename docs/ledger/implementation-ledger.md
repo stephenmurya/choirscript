@@ -314,10 +314,11 @@ production page: performer text at **10.4:1** on the canvas, `×N` badge at **19
 `--primary` text measured **2.25:1** — below the 3:1 floor even for large text.
 
 **Verified.** Dev harness with four identical melody-Alto repeats, an SATB ×1, an identical SATB
-×2 and a Lead — rendered 3 sections instead of 7, badges `×4` / `×3` / none, melody block showing
-a single Alto lane and the SATB block four lanes. After deploy, the same fixture was published
-through `POST /api/share` and re-checked on `https://choirscript.vercel.app/s/t6x0gM4VL5` at
-390 px: 3 sections, `×4` / `×3`, rail `Chorus · ×4`, `Chorus · ×3`, `Chorus`, chip colour
+×2 and a Lead — rendered 3 sections instead of 7, badges `×4` / `×3` / `×1` (the badge is
+unconditional so a singer never has to infer "once"), melody block showing a single Alto lane and
+the SATB block four lanes. After deploy, the same fixture was published through `POST /api/share`
+and re-checked on `https://choirscript.vercel.app/s/t6x0gM4VL5` at 390 px: 3 sections, badges
+`×4` / `×3` / `×1`, rail `Chorus · ×4`, `Chorus · ×3`, `Chorus · ×1`, chip colour
 `lab(76.02 2.26 -41.62)`.
 
 **Not verified.** The editor's arrangement panel was not driven end-to-end (it needs an
