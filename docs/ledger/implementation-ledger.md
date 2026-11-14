@@ -54,6 +54,7 @@ last commit `a79c7b1` 2026-10-31. No CI configuration (`.github` absent), no tes
 | 2026-10-31 | `29d85f6` | feat(share): live share links with in-place refresh; tighter mobile rehearsal | 15 | Mutable share head + `.rev.json` + `editToken`, `SharedSongLive`, publish-on-save, ADR-0011, CSS density vars |
 | 2026-10-31 | `8942c88` | fix(rehearsal): fit more syllables per line on phones | 2 | Note box `h-9 w-10` → `h-7 w-8`, lane chip `h-7` → `h-6`, `--syllable-pad 0.125rem`, `--line-col-gap 0.125rem`, `--line-col gap 0.125rem` |
 | 2026-10-31 | `783c338` | feat(share): push live updates over a Firestore doorbell instead of polling | 8 | `shareHeads` rules + `shareHeads.ts`, `publishShareHead` wiring, `SharedSongLive` subscription, 3 s poll removed, ADR-0011/ledger rewritten |
+| 2026-11-04 | `1ea4845` | fix(rehearsal): collapse identical repeats to ×N; legible performer accent | 11 | `groupResolvedSections` in `arrangement.ts`; both rehearsal views + rail render one block per run of identical performances; `--performer` token replaces `--primary` for "who sings this"; ADR-0012 |
 
 Everything below the table is now committed — the earlier "uncommitted working tree" note in this
 document was accurate on the morning of 2026-10-31 and is superseded by the rows above.
@@ -292,6 +293,41 @@ file was modified.
 
 Unverified by nature: everything marked NOT STARTED. The TIER/PHASE estimates in
 `planning/implementation-roadmap.md` are judgement, not measurements.
+
+## Rehearsal repetition and performer contrast (2026-11-04, `1ea4845`)
+
+**What bothered the user:** a chorus set to ×4 rendered as four full blocks of the same lyrics
+with identical notes, plus a rail listing "Chorus · repeat 2/3/4". The repetition is an artefact
+of how performance order is stored, not of what the singer needs to read. Separately, the "who
+sings this" chip used `--primary`, a button-background colour, as text.
+
+**Fix.** `groupResolvedSections` groups **consecutive** resolved entries whose signature
+(`sourceSectionId · performer · voicing · melodyPart · note`) is identical, and the renderers draw
+one block with a `×N` badge. Anything differing — melody-Alto vs SATB, a different performer, a
+different director cue — stays its own block (ADR-0012). `repeatIndex` is no longer a render
+concept; line keys and anchors use the group's first `renderIdentity`, so the rail, scroll-spy and
+deep links keep working.
+
+**Contrast.** New `--performer` token (`oklch(0.8 0.115 265)` in dark) replaces `text-primary` in
+the rehearsal chips, the arrangement panel, the rail and the onboarding tip. Measured on the
+production page: performer text at **10.4:1** on the canvas, `×N` badge at **19.1:1**; the old
+`--primary` text measured **2.25:1** — below the 3:1 floor even for large text.
+
+**Verified.** Dev harness with four identical melody-Alto repeats, an SATB ×1, an identical SATB
+×2 and a Lead — rendered 3 sections instead of 7, badges `×4` / `×3` / none, melody block showing
+a single Alto lane and the SATB block four lanes. After deploy, the same fixture was published
+through `POST /api/share` and re-checked on `https://choirscript.vercel.app/s/t6x0gM4VL5` at
+390 px: 3 sections, `×4` / `×3`, rail `Chorus · ×4`, `Chorus · ×3`, `Chorus`, chip colour
+`lab(76.02 2.26 -41.62)`.
+
+**Not verified.** The editor's arrangement panel was not driven end-to-end (it needs an
+authenticated session); its only change is the same token plus the `×N` badge, both exercised by
+the rehearsal surface. Print was not re-printed, but it renders through the same view.
+
+**Environment note.** `git push` hung twice: `credential.helper` is configured with both `manager`
+and `helper-selector`, and the selector opens an invisible GUI prompt in a non-interactive shell.
+Pushing with `-c credential.helper=` and a token URL works. The duplicate helper should be removed
+from the git config.
 
 ## Related
 
