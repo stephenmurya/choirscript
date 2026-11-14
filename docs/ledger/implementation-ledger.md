@@ -358,6 +358,14 @@ inside `[data-rehearsal-section]`. Local swap harness: plain → `So/Mi/Do/Re`, 
 separate. Production `https://choirscript.vercel.app/s/Kog6obnL2c` after deployment at 390 px showed
 four `×1` sections, with `Swap ↻` visible on the second section and transformed notes.
 
+**Follow-up (same day, `4efc04a`).** Rotation now runs over the parts the song actually uses:
+`ringFor(enabledParts)` filters the ring, so a SAT-only song rotates a triangle (S → T → A → S) and
+a bass that is not in the song is never handed a line or added to the chip. The chip stopped saying
+"Swap" alone and now names the movement (`Swap S → T → A`), starting at the soprano when there is
+one, so anticlockwise reads `S → A → T`. Verified locally for SAT and SATB and on production share
+links `1QNKbA8_za` (SAT) and `BCHO3YzVeR` (SATB): clockwise SAT produced S=Mi A=Do T=So with bass
+untouched; clockwise SATB produced S=Mi A=Re T=So B=Do; anticlockwise produced chains starting at S.
+
 **Not verified.** The authenticated editor controls were not driven by browser automation; the
 editor's props and pure swap functions were typechecked, and the production renderer was verified
 from a real share payload containing all four swap forms.

@@ -141,7 +141,11 @@ export function describePartSwap(
   if (!swap?.map && swap?.direction) {
     const ring = ringFor(parts);
     const order = swap.direction === "clockwise" ? ring : [...ring].reverse();
-    return order.map((part) => PART_LETTER[part]).join(" → ");
+    // A chain always reads from the soprano when there is one, so the chip
+    // starts where a singer expects: S → T → A, not A → T → S.
+    const sopranoAt = order.indexOf("soprano");
+    const display = sopranoAt > 0 ? [...order.slice(sopranoAt), ...order.slice(0, sopranoAt)] : order;
+    return display.map((part) => PART_LETTER[part]).join(" → ");
   }
 
   const moves: string[] = [];

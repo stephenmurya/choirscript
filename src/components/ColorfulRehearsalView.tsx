@@ -337,7 +337,7 @@ export function ColorfulRehearsalView({
               {swapMap ? (
                 <span
                   data-rehearsal-swap={occurrence.swap?.map ? "custom" : occurrence.swap?.direction}
-                  title="Parts trade lines for this section"
+                  title="Each part sings the line of the part before it in the chain"
                   className="inline-flex items-center gap-1 rounded-full border border-amber-300/40 bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-200"
                 >
                   <ArrowLeftRight className="size-3" />

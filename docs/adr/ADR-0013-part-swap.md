@@ -39,8 +39,10 @@ type PartSwap = {
   notes the sopranos used to read — the row is still "Tenor", because that is who reads it.
 - **The swap is visible, and spelled out.** The section header carries a chip that names the
   movement — `Swap S → T → A`, `Swap S → T → B → A`, or `Swap S→T · T→S` for a custom map — so a
-  singer knows where their line went without opening the editor. The editor row carries the same
-  chip, and the editor's mode buttons show the chain they will produce for this song.
+  singer knows where their line went without opening the editor. A rotation chain always starts at
+  the soprano when the song has one, so anticlockwise reads `S → A → T`, not `A → T → S`. The
+  editor row carries the same chip, and the editor's mode buttons show the chain they will produce
+  for this song.
 - **Grouping includes the swap.** Two adjacent placements with different swaps are different
   performances and must not collapse into one `×N` block (ADR-0012); the group signature includes a
   stable serialisation of the resolved map.
