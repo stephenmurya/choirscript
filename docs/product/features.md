@@ -120,7 +120,7 @@ at the end — that section is the one to work from when closing gaps.
 | G-12 | Saved view presets per user | **NOT STARTED** | Toggles reset on reload |
 | G-16 | Identical consecutive performances collapse to one block, badged `×N` (including `×1`) | **DONE** | ADR-0012; `groupResolvedSections` in `src/lib/arrangement.ts`; used by both rehearsal views, the arrangement rail and therefore print |
 | G-17 | "Who sings this" accent is legible on the dark canvas | **DONE** | `--performer` token in `globals.css` (contrast 2.25:1 → 10.4:1); used by both rehearsal chips, the arrangement panel, the rail and the onboarding tip |
-| G-18 | Parts swap lines within a section (rotation ↻/↺ or custom map) | **DONE** | ADR-0013; `src/lib/partSwap.ts`; chip on the section and in the arrangement row; applies in both rehearsal views and print |
+| G-18 | Parts swap lines within a section (rotation or custom map), limited to the parts in use | **DONE** | ADR-0013; `src/lib/partSwap.ts`; rotation runs over the enabled ring (SAT rotates S→T→A), chip names the movement; applies in both rehearsal views and print |
 | G-13 | Print sheet | **INCOMPLETE** | `@media print` rules and `PrintToolbar.tsx` exist; output is the screen layout, not a sheet with systems, pagination and part alignment |
 | G-14 | PDF export | **NOT STARTED** | Print-to-PDF via the browser only (ADR-0009) |
 | G-15 | Practice audio, stems, mute/solo | **NOT STARTED** | Future module: `../future/ai-processing.md` |

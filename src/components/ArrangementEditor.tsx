@@ -35,10 +35,10 @@ import type { ArrangementOccurrence, PartSwap, PartSwapDirection, Song, VocalPar
 import { getActiveArrangement, normalizeRepeatCount } from "@/lib/arrangement";
 import {
   PART_LABEL as SWAP_PART_LABEL,
-  SWAP_RING,
   describePartSwap,
   directionMap,
   resolvePartSwap,
+  ringFor,
 } from "@/lib/partSwap";
 import { PART_LABELS } from "@/lib/annotationUtils";
 import { getEnabledVoiceParts } from "@/lib/songSelection";
@@ -147,22 +147,25 @@ function SectionPicker({
  */
 function SwapEditor({
   swap,
+  parts,
   onChange,
 }: {
   swap: PartSwap | undefined;
+  parts: VocalPart[];
   onChange: (next: PartSwap | undefined) => void;
 }) {
   const mode: "off" | PartSwapDirection | "custom" = swap?.map
     ? "custom"
     : (swap?.direction ?? "off");
+  const ring = ringFor(parts);
   const resolved =
-    resolvePartSwap(swap) ??
+    resolvePartSwap(swap, parts) ??
     ({ soprano: "soprano", alto: "alto", tenor: "tenor", bass: "bass" } as Record<VocalPart, VocalPart>);
 
   const modes: Array<{ key: "off" | PartSwapDirection | "custom"; label: string; title: string }> = [
     { key: "off", label: "Off", title: "No swap — every part sings its own line" },
-    { key: "clockwise", label: "↻", title: "Clockwise: S → T → B → A" },
-    { key: "anticlockwise", label: "↺", title: "Anticlockwise: S → A → B → T" },
+    { key: "clockwise", label: "↻", title: `Clockwise: ${describePartSwap({ direction: "clockwise" }, parts)}` },
+    { key: "anticlockwise", label: "↺", title: `Anticlockwise: ${describePartSwap({ direction: "anticlockwise" }, parts)}` },
     { key: "custom", label: "Custom", title: "Pick which part each part sings" },
   ];
 
@@ -173,7 +176,7 @@ function SwapEditor({
     }
 
     if (next === "custom") {
-      onChange({ map: { ...directionMap("clockwise") } });
+      onChange({ map: { ...directionMap("clockwise", parts) } });
       return;
     }
 
@@ -188,7 +191,7 @@ function SwapEditor({
           Swap parts
         </span>
         {swap ? (
-          <span className="text-[10px] font-medium text-amber-200">{describePartSwap(swap)}</span>
+          <span className="text-[10px] font-medium text-amber-200">Swap {describePartSwap(swap, parts)}</span>
         ) : null}
       </div>
       <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
@@ -209,7 +212,7 @@ function SwapEditor({
       </div>
       {mode === "custom" ? (
         <div className="grid grid-cols-2 gap-1">
-          {(["soprano", "alto", "tenor", "bass"] as VocalPart[]).map((target) => (
+          {ringFor(parts).slice().sort((a, b) => ["soprano", "alto", "tenor", "bass"].indexOf(a) - ["soprano", "alto", "tenor", "bass"].indexOf(b)).map((target) => (
             <label key={target} className="flex min-w-0 items-center gap-1">
               <span className="w-7 shrink-0 text-[9px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
                 {SWAP_PART_LABEL[target].slice(0, 3)}
@@ -225,7 +228,7 @@ function SwapEditor({
                 }
                 className="h-6 w-full min-w-0 rounded border border-border bg-background px-1 text-[10px] text-foreground outline-none focus:border-ring"
               >
-                {SWAP_RING.map((source) => (
+                {ring.map((source) => (
                   <option key={source} value={source}>
                     {SWAP_PART_LABEL[source]}
                   </option>
@@ -238,7 +241,9 @@ function SwapEditor({
         <p className="text-[10px] text-muted-foreground">Every part sings its own line.</p>
       ) : (
         <p className="text-[10px] text-muted-foreground">
-          {mode === "clockwise" ? "S → T → B → A" : "S → A → B → T"}
+          {mode === "clockwise"
+            ? describePartSwap({ direction: "clockwise" }, parts)
+            : describePartSwap({ direction: "anticlockwise" }, parts)}
         </p>
       )}
     </div>
@@ -407,7 +412,11 @@ function SortableRow({
                   </div>
                 </div>
               ) : null}
-              <SwapEditor swap={occurrence.swap} onChange={(next) => onSetOccurrenceSwap(occurrence.id, next)} />
+              <SwapEditor
+                swap={occurrence.swap}
+                parts={enabledParts}
+                onChange={(next) => onSetOccurrenceSwap(occurrence.id, next)}
+              />
             </div>
           ) : (
             <button
@@ -428,10 +437,10 @@ function SortableRow({
                   Melody · {(occurrence.melodyPart ?? "soprano").slice(0, 1).toUpperCase()}
                 </span>
               ) : null}
-              {resolvePartSwap(occurrence.swap) ? (
+              {resolvePartSwap(occurrence.swap, enabledParts) ? (
                 <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-amber-200">
                   <ArrowLeftRight className="size-2.5" />
-                  {describePartSwap(occurrence.swap)}
+                  Swap {describePartSwap(occurrence.swap, enabledParts)}
                 </span>
               ) : null}
             </button>

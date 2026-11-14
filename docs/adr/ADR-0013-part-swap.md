@@ -26,9 +26,10 @@ type PartSwap = {
 };
 ```
 
-- **Rotation** follows the ring: clockwise sends each part's notes one position clockwise
-  (S → T → B → A → S), so sopranos end up singing the alto line, tenors the soprano line, and so
-  on. Anticlockwise is the reverse.
+- **Rotation follows the ring of parts the song actually uses.** Clockwise sends each part's notes
+  one position clockwise within that ring, so a SATB song rotates S → T → B → A → S, while a
+  SAT-only song rotates a triangle, S → T → A → S. A part the song does not use is never handed a
+  line and never appears in the rotation. Anticlockwise is the reverse.
 - **Custom** is an explicit target → source map: `map.tenor = "soprano"` means the tenors sing what
   the sopranos used to sing. It wins over `direction` when both are present.
 - **Rendering transforms, storage does not.** `applyPartSwapToSection` rewrites syllable part
@@ -36,9 +37,10 @@ type PartSwap = {
   canonical and the same section can appear twice in one arrangement with two different swaps.
 - **The lane label stays the singer's own part.** After a clockwise swap the Tenor lane shows the
   notes the sopranos used to read — the row is still "Tenor", because that is who reads it.
-- **The swap is visible.** The section header carries a chip (`Swap ↻`, `Swap ↺`,
-  `Swap custom`) and the editor's collapsed row carries the same chip, so nobody has to open the
-  editor to discover that a section is swapped.
+- **The swap is visible, and spelled out.** The section header carries a chip that names the
+  movement — `Swap S → T → A`, `Swap S → T → B → A`, or `Swap S→T · T→S` for a custom map — so a
+  singer knows where their line went without opening the editor. The editor row carries the same
+  chip, and the editor's mode buttons show the chain they will produce for this song.
 - **Grouping includes the swap.** Two adjacent placements with different swaps are different
   performances and must not collapse into one `×N` block (ADR-0012); the group signature includes a
   stable serialisation of the resolved map.
