@@ -28,7 +28,7 @@ function ArrangementList({
     <ol className="space-y-1" aria-label="Rehearsal arrangement">
       {rows.map(({ occurrence, section, renderIdentity, count }, index) => {
         const id = `rehearsal-${renderIdentity}`;
-        const label = count > 1 ? `${section.name} · ×${count}` : section.name;
+        const label = `${section.name} · ×${count}`;
         const performer = occurrence.performer ?? "";
         const melody = occurrence.voicing === "melody";
         const active = activeId === id;

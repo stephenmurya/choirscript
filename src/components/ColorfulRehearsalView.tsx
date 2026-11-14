@@ -305,16 +305,14 @@ export function ColorfulRehearsalView({
           >
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-semibold text-foreground">{section.name}</h2>
-              {count > 1 ? (
-                <span
-                  data-rehearsal-repeat={count}
-                  title={`Sung ${count} times in this arrangement`}
-                  className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground"
-                >
-                  <Repeat className="size-3" />
-                  ×{count}
-                </span>
-              ) : null}
+              <span
+                data-rehearsal-repeat={count}
+                title={`Sung ${count} ${count === 1 ? "time" : "times"} in this arrangement`}
+                className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground"
+              >
+                <Repeat className="size-3" />
+                ×{count}
+              </span>
               {occurrence.performer ? (
                 <span
                   data-rehearsal-performer="true"

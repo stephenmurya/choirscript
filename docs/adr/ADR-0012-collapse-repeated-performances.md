@@ -26,7 +26,9 @@ labelled with a repeat count:
 - signature = `sourceSectionId · performer · voicing · melodyPart · note`
 - adjacent entries with the same signature collapse, whether they come from one occurrence's
   `repeatCount` or from two separate occurrences configured identically
-- a group renders the section **once**, with a `×N` badge when `N > 1`
+- a group renders the section **once**, with a `×N` badge **always shown**, including `×1`
+- the badge is unconditional on purpose: a singer should never have to infer whether a line is
+  sung once or several times, and an absent badge is exactly the ambiguity `×1` removes
 - the block's DOM id stays `rehearsal-<first renderIdentity>`, so the rail, scroll-spy and any
   deep link keep working
 - the arrangement rail shows `Chorus · ×4` instead of three "repeat N" rows
